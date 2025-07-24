@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { getTasks, addTask, updateTask } from '../backend/taskApi';
 import { FaPlus, FaRegClock } from 'react-icons/fa';
 import Stats from './Stats';
+import Footer from './Footer';
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
@@ -535,6 +536,8 @@ export default function StyledTaskBoard({ user }) {
         </div>
       </div>
     )}
+    {/* 页脚 */}
+    <Footer />
   </>
 );
 }

@@ -1,25 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import Footer from './Footer';
 
 const COLORS = ['#60a5fa', '#f87171', '#34d399', '#fbbf24', '#a78bfa', '#f472b6', '#38bdf8', '#facc15'];
 
-export default function Stats({ user, onBack, darkMode }) {
+export default function Stats({ onBack }) {
   const [mode, setMode] = useState('week'); // 'week' or 'day'
   const allTasks = window.tasks || [];
   // 统计区间
   const now = new Date();
-  let days = mode === 'week' ? 7 : 1;
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (mode === 'week' ? now.getDay() : 0));
   // X轴标签
   const dayLabels = mode === 'day'
     ? [{ day: 'Today' }]
-    : ['S','M','T','W','T','F','S'].map((d, i) => ({ day: d }));
+    : ['S','M','T','W','T','F','S'].map(d => ({ day: d }));
   // 任务名
   const taskNames = allTasks.map(t => t.text);
   // 构造堆叠数据
   const chartData = dayLabels.map((label, i) => {
     const obj = { day: label.day };
-    allTasks.forEach((t, idx) => {
+    allTasks.forEach(t => {
       obj[t.text] = 0;
       (t.timeRecords||[]).forEach(r => {
         if (r.start && r.end) {
@@ -144,27 +144,7 @@ export default function Stats({ user, onBack, darkMode }) {
           </div>
         ))}
       </div>
-      {/* 页脚 - 灌满页面宽度 */}
-      <footer style={{
-        position: 'fixed',
-        left: 0,
-        bottom: 0,
-        width: '100vw',
-        padding: '18px 0 12px 0',
-        background: 'linear-gradient(90deg, #f5f6ff 0%, #fff 100%)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        fontSize: 20,
-        color: '#888',
-        fontFamily: 'monospace',
-        letterSpacing: 0.2,
-        zIndex: 100
-      }}>
-        <span style={{marginLeft:22, fontSize: 8}}>V 1.0.1</span>
-        <span style={{marginRight:928, fontSize: 12}}>Copyright © 2025 Yiyang Liu</span>
-      <span style={{marginRight:418, fontSize: 12}}>Made with ❤️ in Toronto</span>
-      </footer>
+      <Footer />
     </div>
     </>
   );
