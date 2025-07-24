@@ -100,24 +100,8 @@ export default function App() {
         </button>
       </div>
 
-      {/* 主应用内容 */}
-      <TaskBoard user={user} />
-
-      {/* 页脚 */}
-      <footer style={{
-        background: '#1f2937',
-        color: '#fff',
-        textAlign: 'center',
-        padding: '16px',
-        fontSize: '14px',
-        marginTop: 'auto'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '1200px', margin: '0 auto' }}>
-          <span>V 1.0.1</span>
-          <span>Copyright © 2025 Yiyang Liu</span>
-          <span>Made with ❤️ in Toronto</span>
-        </div>
-      </footer>
-    </div>
-  );
-}
+             {/* 主应用内容 */}
+       <TaskBoard user={user} />
+     </div>
+   );
+ }

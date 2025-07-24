@@ -74,16 +74,19 @@ export default function Stats({ user, onBack, darkMode }) {
     if (tasksByQuadrant[t.quadrant]) tasksByQuadrant[t.quadrant].push(t);
   });
   return (
-    <div style={{
-      maxWidth: 1200,
-      margin: '0 auto',
-      padding: 48,
-      background: '#f8fafc',
-      borderRadius: 24,
-      boxShadow: '0 4px 24px #0001',
-      minHeight: '80vh',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif',
-    }}>
+    <>
+      <div style={{
+        maxWidth: 1200,
+        margin: '0 auto',
+        padding: 48,
+        background: '#f8fafc',
+        borderRadius: 24,
+        boxShadow: '0 4px 24px #0001',
+        minHeight: '100vh',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 40, fontWeight: 800, color: '#222', marginBottom: 2 }}>
@@ -141,6 +144,28 @@ export default function Stats({ user, onBack, darkMode }) {
           </div>
         ))}
       </div>
+      {/* 页脚 - 灌满页面宽度 */}
+      <footer style={{
+        position: 'fixed',
+        left: 0,
+        bottom: 0,
+        width: '100vw',
+        padding: '18px 0 12px 0',
+        background: 'linear-gradient(90deg, #f5f6ff 0%, #fff 100%)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: 20,
+        color: '#888',
+        fontFamily: 'monospace',
+        letterSpacing: 0.2,
+        zIndex: 100
+      }}>
+        <span style={{marginLeft:22, fontSize: 8}}>V 1.0.1</span>
+        <span style={{marginRight:928, fontSize: 12}}>Copyright © 2025 Yiyang Liu</span>
+      <span style={{marginRight:418, fontSize: 12}}>Made with ❤️ in Toronto</span>
+      </footer>
     </div>
+    </>
   );
 } 

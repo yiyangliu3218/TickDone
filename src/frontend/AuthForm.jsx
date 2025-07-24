@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 const emailProviders = [
@@ -20,16 +20,13 @@ export default function AuthForm({ onAuth }) {
     e.preventDefault();
     setError('');
     if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
-      else onAuth();
+      else onAuth(data.user);
     } else {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) setError(error.message);
-      else {
-        setEmailSent(true);
-        onAuth();
-      }
+      else setEmailSent(true);
     }
   };
 

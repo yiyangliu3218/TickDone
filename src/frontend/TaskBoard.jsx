@@ -3,6 +3,8 @@ import { getTasks, addTask, updateTask } from '../backend/taskApi';
 import { FaPlus, FaRegClock } from 'react-icons/fa';
 import Stats from './Stats';
 
+const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
 const quadrantMeta = {
   q1: { title: '1', color: '#fef2f2', border: '#fecaca', headerColor: '#b91c1c' },
   q2: { title: '2', color: '#fefce8', border: '#fde68a', headerColor: '#92400e' },
@@ -132,14 +134,30 @@ export default function StyledTaskBoard({ user }) {
     setContextMenu({ open: true, x: e.clientX, y: e.clientY, quadrant: q, index: i });
   };
   const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0, quadrant: '', index: -1 });
-  const handleDelete = async (q, i) => {
-    const task = tasks[q][i];
-    await updateTask(task.id, { deleted: true });
-    setTasks(prev => ({
-      ...prev,
-      [q]: prev[q].filter((_, idx) => idx !== i)
-    }));
-    setContextMenu({ open: false, x: 0, y: 0, quadrant: '', index: -1 });
+
+  // 删除任务时加deletedAt
+  const handleDelete = (q, i) => {
+    setTasks(prev => {
+      const arr = [...prev[q]];
+      arr[i] = { ...arr[i], deleted: true, deletedAt: Date.now() };
+      return { ...prev, [q]: arr };
+    });
+  };
+  // 恢复已删除/已完成任务
+  const restoreTask = (q, i) => {
+    setTasks(prev => {
+      const arr = [...prev[q]];
+      arr[i] = { ...arr[i], deleted: false, deletedAt: undefined, completed: false };
+      return { ...prev, [q]: arr };
+    });
+  };
+  // 彻底删除
+  const hardDelete = (q, i) => {
+    setTasks(prev => {
+      const arr = [...prev[q]];
+      arr.splice(i, 1);
+      return { ...prev, [q]: arr };
+    });
   };
 
   // 计时相关逻辑
@@ -258,6 +276,8 @@ export default function StyledTaskBoard({ user }) {
 
   // 在StyledTaskBoard顶部加：
   const [showStats, setShowStats] = useState(false);
+  const [showCompleted, setShowCompleted] = useState({ open: false, quadrant: '' });
+  const [showDeleted, setShowDeleted] = useState({ open: false, quadrant: '' });
 
   useEffect(() => {
     if (!user) return;
@@ -269,6 +289,18 @@ export default function StyledTaskBoard({ user }) {
       setLoading(false);
     });
   }, [user]);
+
+  // 自动清理7天前的已删除任务
+  useEffect(() => {
+    setTasks(prev => {
+      const now = Date.now();
+      const newTasks = {};
+      Object.keys(prev).forEach(q => {
+        newTasks[q] = prev[q].filter(t => !t.deleted || (t.deletedAt && now - t.deletedAt < SEVEN_DAYS));
+      });
+      return newTasks;
+    });
+  }, []);
 
   const handleAdd = async (q) => {
     if (!newTask[q].trim()) return;
@@ -294,6 +326,9 @@ export default function StyledTaskBoard({ user }) {
     }));
     updateTask(task.id, { progress: value });
   };
+
+  // 统计未完成未删除任务数
+  const getActiveCount = q => tasks[q].filter(t => !t.completed && !t.deleted).length;
 
   if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
 
@@ -342,7 +377,11 @@ export default function StyledTaskBoard({ user }) {
                 borderBottom: `2px solid ${quadrantMeta[q].headerColor}`,
                 paddingBottom: 8,
                 marginTop: -10,
-                marginBottom: 20
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8
               }} onClick={() => startEdit(q)}>
                 {editing === q ? (
                   <input
@@ -356,7 +395,9 @@ export default function StyledTaskBoard({ user }) {
                 ) : (
                   quadrantLabels[q]
                 )}
-                <span style={{ fontSize: 16, opacity: 0.7 }}>（{tasks[q].length}）</span>
+                <span style={{ fontSize: 16, opacity: 0.7 }}>（{getActiveCount(q)}）</span>
+                <button onClick={()=>setShowCompleted({ open: true, quadrant: q })} style={{ background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>已完成</button>
+                <button onClick={()=>setShowDeleted({ open: true, quadrant: q })} style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>已删除</button>
               </h3>
               {tasks[q].map((t, i) => !t.deleted && !t.completed && (
                 <div key={t.id} style={{ ...taskCardStyle, padding: '10px 15px', fontSize: 15, marginBottom: 12 }} onContextMenu={e => handleContextMenu(e, q, i)}>
@@ -385,7 +426,7 @@ export default function StyledTaskBoard({ user }) {
                   {/* 右键菜单删除 */}
                   {contextMenu.open && contextMenu.quadrant === q && contextMenu.index === i && (
                     <div style={{position:'fixed',left:contextMenu.x,top:contextMenu.y,background:'#fff',border:'1px solid #eee',borderRadius:8,boxShadow:'0 2px 2px #0002',zIndex:2000,padding:'8px 0',minWidth:60}}>
-                      <div onClick={()=>handleDelete(q,i)} style={{padding:'10px 10px',cursor:'pointer',color:'#ef4444',fontWeight:600,fontSize:12}}>
+                      <div onClick={()=>{handleDelete(q,i);closeContextMenu();}} style={{padding:'10px 10px',cursor:'pointer',color:'#ef4444',fontWeight:600,fontSize:12}}>
                         删除任务
                       </div>
                     </div>
@@ -407,8 +448,6 @@ export default function StyledTaskBoard({ user }) {
           </div>
         ))}
       </div>
-      {/* 统计页集成真实任务timeRecords数据 */}
-      {/* 在StyledTaskBoard顶部引入Stats并加： */}
       {/* 计时浮窗 */}
       {focusTimer.open && (
         <FocusTimerModal
@@ -458,24 +497,44 @@ export default function StyledTaskBoard({ user }) {
         </div>
       )}
     </div>
-    <footer style={{
-      width: '100%',
-      marginTop: 20,
-      padding: '18px 0 12px 0',
-      background: 'linear-gradient(90deg, #f5f6ff 0%, #fff 100%)',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      fontSize: 12,
-      color: '#888',
-    //fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif',
-      fontFamily: 'monospace',
-      letterSpacing: 0.2
-    }}>
-     <span style={{marginLeft:20, fontSize: 8}}>V 1.0.1.</span>
-      <span style={{marginRight: 1000}}>Copyright © 2025 Yiyang Liu.</span>
-      <span style={{marginRight: 300}}>Made with ❤️ in Toronto</span>
-    </footer>
+    {/* 已完成弹窗（全局只渲染一次） */}
+    {showCompleted.open && (
+      <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+        <div style={{ background: '#fff', borderRadius: 10, padding: 32, minWidth: 320, boxShadow: '0 4px 24px #0002', maxHeight: 500, overflowY: 'auto' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 16 }}>已完成任务</h3>
+          {tasks[showCompleted.quadrant].filter(t => t.completed && !t.deleted).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>暂无已完成任务</div>}
+          {tasks[showCompleted.quadrant].map((t, i) => t.completed && !t.deleted && (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, fontSize: 15 }}>
+              <span style={{ color: '#374151', textDecoration: 'line-through' }}>{t.text}</span>
+              <div>
+                <button onClick={()=>restoreTask(showCompleted.quadrant, i)} style={{ background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer', marginRight: 8 }}>恢复</button>
+                <button onClick={()=>hardDelete(showCompleted.quadrant, i)} style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>彻底删除</button>
+              </div>
+            </div>
+          ))}
+          <button onClick={()=>setShowCompleted({ open: false, quadrant: '' })} style={{ marginTop: 16, background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600 }}>关闭</button>
+        </div>
+      </div>
+    )}
+    {/* 已删除弹窗（全局只渲染一次） */}
+    {showDeleted.open && (
+      <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+        <div style={{ background: '#fff', borderRadius: 10, padding: 32, minWidth: 320, boxShadow: '0 4px 24px #0002', maxHeight: 500, overflowY: 'auto' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 16 }}>最近删除（7天内）</h3>
+          {tasks[showDeleted.quadrant].filter(t => t.deleted && t.deletedAt && Date.now() - t.deletedAt < SEVEN_DAYS).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>暂无已删除任务</div>}
+          {tasks[showDeleted.quadrant].map((t, i) => t.deleted && t.deletedAt && Date.now() - t.deletedAt < SEVEN_DAYS && (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, fontSize: 15 }}>
+              <span style={{ color: '#b91c1c', textDecoration: 'line-through' }}>{t.text}</span>
+              <div>
+                <button onClick={()=>restoreTask(showDeleted.quadrant, i)} style={{ background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer', marginRight: 8 }}>恢复</button>
+                <button onClick={()=>hardDelete(showDeleted.quadrant, i)} style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>彻底删除</button>
+              </div>
+            </div>
+          ))}
+          <button onClick={()=>setShowDeleted({ open: false, quadrant: '' })} style={{ marginTop: 16, background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600 }}>关闭</button>
+        </div>
+      </div>
+    )}
   </>
 );
 }
