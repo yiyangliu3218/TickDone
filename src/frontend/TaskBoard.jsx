@@ -325,6 +325,7 @@ export default function StyledTaskBoard({ user }) {
   // 在StyledTaskBoard顶部加：
   const [showStats, setShowStats] = useState(false);
   const [completedVisibility, setCompletedVisibility] = useState({ q1: false, q2: false, q3: false, q4: false });
+  const [viewMode, setViewMode] = useState('quadrant'); // 'quadrant' or 'list'
 
   useEffect(() => {
     if (!user) return;
@@ -377,6 +378,19 @@ export default function StyledTaskBoard({ user }) {
     setCompletedVisibility(prev => ({ ...prev, [q]: !prev[q] }));
   };
 
+  // 获取所有任务（用于列表视图）
+  const getAllTasks = () => {
+    const allTasks = [];
+    Object.keys(tasks).forEach(q => {
+      tasks[q].forEach(task => {
+        if (!task.deleted) {
+          allTasks.push({ ...task, quadrant: q });
+        }
+      });
+    });
+    return allTasks;
+  };
+
   if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
 
   // 1. 修复统计按钮点开没东西
@@ -386,27 +400,288 @@ export default function StyledTaskBoard({ user }) {
     return <Stats user={user} onBack={() => setShowStats(false)} darkMode={false} />;
   }
 
+  // 列表视图
+  if (viewMode === 'list') {
+    const allTasks = getAllTasks();
+    const activeTasks = allTasks.filter(t => !t.completed);
+    const completedTasks = allTasks.filter(t => t.completed);
+    
+    return (
+      <>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: 48 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <h1 style={{ fontSize: 32, margin: 0 }}>任务列表</h1>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setViewMode('quadrant')}
+                style={{
+                  background: '#e5e7eb',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '10px 20px',
+                  fontWeight: 600,
+                  fontSize: 15
+                }}
+              >
+                四象限
+              </button>
+              <button
+                onClick={() => setShowStats(true)}
+                style={{
+                  background: '#60a5fa',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '10px 20px',
+                  fontWeight: 600,
+                  fontSize: 15,
+                  boxShadow: '0 2px 8px #60a5fa22'
+                }}
+              >
+                统计
+              </button>
+            </div>
+          </div>
+
+          {/* 任务统计 */}
+          <div style={{ display: 'flex', gap: 24, marginBottom: 32 }}>
+            <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px #0001', minWidth: 120 }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#2563eb' }}>{activeTasks.length}</div>
+              <div style={{ fontSize: 14, color: '#6b7280' }}>进行中</div>
+            </div>
+            <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px #0001', minWidth: 120 }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#059669' }}>{completedTasks.length}</div>
+              <div style={{ fontSize: 14, color: '#6b7280' }}>已完成</div>
+            </div>
+            <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px #0001', minWidth: 120 }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#dc2626' }}>{allTasks.length}</div>
+              <div style={{ fontSize: 14, color: '#6b7280' }}>总计</div>
+            </div>
+          </div>
+
+          {/* 进行中的任务 */}
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, marginBottom: 24, boxShadow: '0 2px 12px #0001' }}>
+            <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20, color: '#1f2937' }}>进行中的任务</h2>
+            {activeTasks.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#9ca3af', padding: 40 }}>暂无进行中的任务</div>
+            ) : (
+              activeTasks.map((task, index) => (
+                <div key={task.id} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  padding: '12px 0',
+                  borderBottom: index < activeTasks.length - 1 ? '1px solid #f3f4f6' : 'none'
+                }}>
+                  <input 
+                    type="checkbox" 
+                    checked={task.completed} 
+                    onChange={(e) => handleComplete(task.quadrant, tasks[task.quadrant].findIndex(t => t.id === task.id), e.target.checked)}
+                    style={{ marginRight: 12, width: 18, height: 18 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, color: '#374151', marginBottom: 4 }}>{task.text}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                      {quadrantLabels[task.quadrant]} • 进度: {task.progress || 0}%
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <DDLCircle
+                      createdAt={task.createdAt}
+                      ddlDate={task.ddlDate}
+                      daysToDDL={task.daysToDDL}
+                      onClick={() => {
+                        const taskIndex = tasks[task.quadrant].findIndex(t => t.id === task.id);
+                        openDDLDialog(task.quadrant, taskIndex);
+                      }}
+                    />
+                    <FaRegClock
+                      color="#60a5fa"
+                      style={{ cursor: 'pointer', fontSize: 18 }}
+                      title="点击可计时"
+                      onClick={() => {
+                        const taskIndex = tasks[task.quadrant].findIndex(t => t.id === task.id);
+                        openTimer(task.quadrant, taskIndex);
+                      }}
+                    />
+                    <button
+                      onClick={async () => {
+                        const taskIndex = tasks[task.quadrant].findIndex(t => t.id === task.id);
+                        await handleDelete(task.quadrant, taskIndex);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        padding: '4px 8px',
+                        borderRadius: 4
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 已完成的任务 */}
+          {completedTasks.length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 2px 12px #0001' }}>
+              <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20, color: '#1f2937' }}>已完成的任务</h2>
+              {completedTasks.map((task, index) => (
+                <div key={task.id} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  padding: '12px 0',
+                  borderBottom: index < completedTasks.length - 1 ? '1px solid #f3f4f6' : 'none'
+                }}>
+                  <input 
+                    type="checkbox" 
+                    checked={task.completed} 
+                    onChange={(e) => handleComplete(task.quadrant, tasks[task.quadrant].findIndex(t => t.id === task.id), e.target.checked)}
+                    style={{ marginRight: 12, width: 18, height: 18 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, color: '#9ca3af', textDecoration: 'line-through' }}>{task.text}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                      {quadrantLabels[task.quadrant]}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        const taskIndex = tasks[task.quadrant].findIndex(t => t.id === task.id);
+                        handleComplete(task.quadrant, taskIndex, false);
+                      }}
+                      style={{
+                        background: '#e0e7ef',
+                        color: '#2563eb',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '4px 12px',
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      恢复
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const taskIndex = tasks[task.quadrant].findIndex(t => t.id === task.id);
+                        await handleDelete(task.quadrant, taskIndex);
+                      }}
+                      style={{
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '4px 12px',
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 计时浮窗 */}
+        {focusTimer.open && (
+          <FocusTimerModal
+            open={focusTimer.open}
+            onClose={closeTimer}
+            task={tasks[focusTimer.quadrant][focusTimer.index]}
+            onStart={startTimer}
+            onPause={pauseTimer}
+            onStop={stopTimer}
+            running={timerState.running}
+            elapsed={timerState.elapsed}
+          />
+        )}
+        {/* DDL 编辑弹窗 */}
+        {ddlEdit.open && (
+          <div style={{position:'fixed',left:0,top:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.18)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+            <div style={{background:'#fff',borderRadius:10,padding:32,minWidth:320,boxShadow:'0 4px 24px #0002'}}>
+              <h3 style={{marginTop:0,marginBottom:16}}>设置截止日期</h3>
+              <div style={{marginBottom:16,display:'flex',gap:16}}>
+                <label>
+                  <input type="radio" checked={ddlMode==='date'} onChange={()=>setDDLMode('date')} /> 选择日期
+                </label>
+                <label>
+                  <input type="radio" checked={ddlMode==='days'} onChange={()=>setDDLMode('days')} /> 剩余天数
+                </label>
+              </div>
+              {ddlMode === 'date' ? (
+                <input
+                  type="date"
+                  value={ddlDate}
+                  onChange={e=>setDDLDate(e.target.value)}
+                  style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd',marginBottom:16}}
+                />
+              ) : (
+                <input
+                  type="number"
+                  min={1}
+                  value={ddlDays}
+                  onChange={e=>setDDLDays(e.target.value)}
+                  style={{width:'100%',padding:8,borderRadius:4,border:'1px solid #ddd',marginBottom:16}}
+                  placeholder="请输入剩余天数"
+                />
+              )}
+              <button onClick={saveDDL} style={{marginRight:8,background:'#60a5fa',color:'#fff',border:'none',borderRadius:4,padding:'6px 18px',fontWeight:600}}>确定</button>
+              <button onClick={()=>setDDLEdit({ open: false, quadrant: '', index: -1 })} style={{background:'#e5e7eb',color:'#374151',border:'none',borderRadius:4,padding:'6px 18px'}}>取消</button>
+            </div>
+          </div>
+        )}
+        <Footer />
+      </>
+    );
+  }
+
   // 2. 统计按钮移到主面板右上角
   return (
     <>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 48 }} onClick={closeContextMenu}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h1 style={{ fontSize: 32, margin: 0 }}>四象限任务面板(面板标题可以自定义)</h1>
-          <button
-            onClick={() => setShowStats(true)}
-            style={{
-              background: '#60a5fa',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 12,
-              padding: '10px 20px',
-              fontWeight: 600,
-              fontSize: 15,
-              boxShadow: '0 2px 8px #60a5fa22'
-            }}
-          >
-            统计
-          </button>
+          <h1 style={{ fontSize: 32, margin: 0 }}>任务面板(面板标题可以自定义)</h1>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={() => setViewMode('list')}
+              style={{
+                background: '#e5e7eb',
+                color: '#374151',
+                border: 'none',
+                borderRadius: 12,
+                padding: '10px 20px',
+                fontWeight: 600,
+                fontSize: 15
+              }}
+            >
+              列表
+            </button>
+            <button
+              onClick={() => setShowStats(true)}
+              style={{
+                background: '#60a5fa',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                padding: '10px 20px',
+                fontWeight: 600,
+                fontSize: 15,
+                boxShadow: '0 2px 8px #60a5fa22'
+              }}
+            >
+              统计
+            </button>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
           {Object.keys(quadrantMeta).map(q => (
