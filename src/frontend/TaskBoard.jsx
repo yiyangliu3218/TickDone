@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getTasks, addTask, updateTask } from '../backend/taskApi';
+import { getTasks, addTask, updateTask, removeTask } from '../backend/taskApi';
 import { FaPlus, FaRegClock } from 'react-icons/fa';
 import Stats from './Stats';
 import Footer from './Footer';
@@ -130,36 +130,83 @@ export default function StyledTaskBoard({ user }) {
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState({ open: false, x: 0, y: 0, quadrant: '', index: -1 });
+  
+  // 撤销功能状态
+  const [deletedHistory, setDeletedHistory] = useState([]);
+  const [completedHistory, setCompletedHistory] = useState([]);
+
   const handleContextMenu = (e, q, i) => {
     e.preventDefault();
     setContextMenu({ open: true, x: e.clientX, y: e.clientY, quadrant: q, index: i });
   };
   const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0, quadrant: '', index: -1 });
 
-  // 删除任务时加deletedAt
-  const handleDelete = (q, i) => {
-    setTasks(prev => {
-      const arr = [...prev[q]];
-      arr[i] = { ...arr[i], deleted: true, deletedAt: Date.now() };
-      return { ...prev, [q]: arr };
-    });
+  // 删除任务（直接删除，支持撤销）
+  const handleDelete = async (q, i) => {
+    const task = tasks[q][i];
+    try {
+      // 保存到撤销历史
+      setDeletedHistory(prev => [...prev, { task, quadrant: q, index: i, timestamp: Date.now() }]);
+      await removeTask(task.id);
+      setTasks(prev => {
+        const arr = [...prev[q]];
+        arr.splice(i, 1);
+        return { ...prev, [q]: arr };
+      });
+    } catch (error) {
+      console.error('删除任务失败:', error);
+    }
   };
-  // 恢复已删除/已完成任务
-  const restoreTask = (q, i) => {
-    setTasks(prev => {
-      const arr = [...prev[q]];
-      arr[i] = { ...arr[i], deleted: false, deletedAt: undefined, completed: false };
-      return { ...prev, [q]: arr };
-    });
+
+  // 撤销删除
+  const undoDelete = async () => {
+    if (deletedHistory.length === 0) return;
+    const lastDeleted = deletedHistory[deletedHistory.length - 1];
+    try {
+      const restoredTask = await addTask(user.id, lastDeleted.quadrant, lastDeleted.task.text);
+      setTasks(prev => ({
+        ...prev,
+        [lastDeleted.quadrant]: [...prev[lastDeleted.quadrant], { ...restoredTask, ...lastDeleted.task }]
+      }));
+      setDeletedHistory(prev => prev.slice(0, -1));
+    } catch (error) {
+      console.error('撤销删除失败:', error);
+    }
   };
-  // 彻底删除
-  const hardDelete = (q, i) => {
-    setTasks(prev => {
-      const arr = [...prev[q]];
-      arr.splice(i, 1);
-      return { ...prev, [q]: arr };
-    });
+
+  // 撤销完成
+  const undoComplete = async () => {
+    if (completedHistory.length === 0) return;
+    const lastCompleted = completedHistory[completedHistory.length - 1];
+    try {
+      await updateTask(lastCompleted.task.id, { completed: false });
+      setTasks(prev => ({
+        ...prev,
+        [lastCompleted.quadrant]: prev[lastCompleted.quadrant].map((t, i) => 
+          i === lastCompleted.index ? { ...t, completed: false } : t
+        )
+      }));
+      setCompletedHistory(prev => prev.slice(0, -1));
+    } catch (error) {
+      console.error('撤销完成失败:', error);
+    }
   };
+
+  // 键盘快捷键
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          undoComplete();
+        } else {
+          undoDelete();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deletedHistory, completedHistory]);
 
   // 计时相关逻辑
   const openTimer = (q, i) => {
@@ -277,8 +324,7 @@ export default function StyledTaskBoard({ user }) {
 
   // 在StyledTaskBoard顶部加：
   const [showStats, setShowStats] = useState(false);
-  const [showCompleted, setShowCompleted] = useState({ open: false, quadrant: '' });
-  const [showDeleted, setShowDeleted] = useState({ open: false, quadrant: '' });
+  const [completedVisibility, setCompletedVisibility] = useState({ q1: false, q2: false, q3: false, q4: false });
 
   useEffect(() => {
     if (!user) return;
@@ -291,18 +337,6 @@ export default function StyledTaskBoard({ user }) {
     });
   }, [user]);
 
-  // 自动清理7天前的已删除任务
-  useEffect(() => {
-    setTasks(prev => {
-      const now = Date.now();
-      const newTasks = {};
-      Object.keys(prev).forEach(q => {
-        newTasks[q] = prev[q].filter(t => !t.deleted || (t.deletedAt && now - t.deletedAt < SEVEN_DAYS));
-      });
-      return newTasks;
-    });
-  }, []);
-
   const handleAdd = async (q) => {
     if (!newTask[q].trim()) return;
     const task = await addTask(user.id, q, newTask[q]);
@@ -312,6 +346,10 @@ export default function StyledTaskBoard({ user }) {
 
   const handleComplete = async (q, i, checked) => {
     const task = tasks[q][i];
+    if (checked) {
+      // 保存到撤销历史
+      setCompletedHistory(prev => [...prev, { task, quadrant: q, index: i, timestamp: Date.now() }]);
+    }
     await updateTask(task.id, { completed: checked });
     setTasks(prev => ({
       ...prev,
@@ -330,6 +368,14 @@ export default function StyledTaskBoard({ user }) {
 
   // 统计未完成未删除任务数
   const getActiveCount = q => tasks[q].filter(t => !t.completed && !t.deleted).length;
+  
+  // 统计已完成任务数
+  const getCompletedCount = q => tasks[q].filter(t => t.completed && !t.deleted).length;
+
+  // 切换已完成任务显示状态
+  const toggleCompletedVisibility = (q) => {
+    setCompletedVisibility(prev => ({ ...prev, [q]: !prev[q] }));
+  };
 
   if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
 
@@ -345,7 +391,7 @@ export default function StyledTaskBoard({ user }) {
     <>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 48 }} onClick={closeContextMenu}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h1 style={{ fontSize: 32, margin: 0 }}>四象限任务面板</h1>
+          <h1 style={{ fontSize: 32, margin: 0 }}>四象限任务面板(面板标题可以自定义)</h1>
           <button
             onClick={() => setShowStats(true)}
             style={{
@@ -370,6 +416,7 @@ export default function StyledTaskBoard({ user }) {
               borderRadius: 20,
               padding: 32,
               minHeight: 400,
+              position: 'relative'
             }}>
               <h3 style={{
                 textAlign: 'center',
@@ -397,9 +444,102 @@ export default function StyledTaskBoard({ user }) {
                   quadrantLabels[q]
                 )}
                 <span style={{ fontSize: 16, opacity: 0.7 }}>（{getActiveCount(q)}）</span>
-                <button onClick={()=>setShowCompleted({ open: true, quadrant: q })} style={{ background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>已完成</button>
-                <button onClick={()=>setShowDeleted({ open: true, quadrant: q })} style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>已删除</button>
               </h3>
+              
+              {/* Show/Hide按钮 - 放在面板右侧 */}
+              <button 
+                onClick={() => toggleCompletedVisibility(q)}
+                style={{ 
+                  position: 'absolute',
+                  top: 20,
+                  right: 20,
+                  background: 'none', 
+                  border: 'none', 
+                  color: '#495057', 
+                  cursor: 'pointer', 
+                  fontSize: 14,
+                  fontWeight: 500,
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                {completedVisibility[q] ? 'Hide' : 'Show'}
+              </button>
+              
+              {/* 已完成任务列表 - 根据显示状态切换 */}
+              {completedVisibility[q] && (
+                <div style={{ 
+                  background: '#f8f9fa', 
+                  borderRadius: 8, 
+                  marginBottom: 16,
+                  padding: '12px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginBottom: 8,
+                    fontSize: 14,
+                    color: '#6c757d'
+                  }}>
+                    <span>{getCompletedCount(q)} Completed</span>
+                  </div>
+                  {tasks[q].filter(t => t.completed && !t.deleted).length === 0 && (
+                    <div style={{ color: '#adb5bd', fontSize: 13, textAlign: 'center', padding: '8px' }}>
+                      暂无已完成任务
+                    </div>
+                  )}
+                  {tasks[q].map((t, i) => t.completed && !t.deleted && (
+                    <div key={i} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      padding: '6px 8px',
+                      marginBottom: 4,
+                      background: '#fff',
+                      borderRadius: 4,
+                      fontSize: 14
+                    }}>
+                      <span style={{ color: '#6c757d', textDecoration: 'line-through' }}>{t.text}</span>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button 
+                          onClick={() => handleComplete(q, i, false)}
+                          style={{ 
+                            background: '#e0e7ef', 
+                            color: '#2563eb', 
+                            border: 'none', 
+                            borderRadius: 4, 
+                            padding: '2px 6px', 
+                            fontSize: 12, 
+                            cursor: 'pointer' 
+                          }}
+                        >
+                          恢复
+                        </button>
+                        <button 
+                          onClick={async () => { await handleDelete(q, i); }}
+                          style={{ 
+                            background: '#fee2e2', 
+                            color: '#b91c1c', 
+                            border: 'none', 
+                            borderRadius: 4, 
+                            padding: '2px 6px', 
+                            fontSize: 12, 
+                            cursor: 'pointer' 
+                          }}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
               {tasks[q].map((t, i) => !t.deleted && !t.completed && (
                 <div key={t.id} style={{ ...taskCardStyle, padding: '10px 15px', fontSize: 15, marginBottom: 12 }} onContextMenu={e => handleContextMenu(e, q, i)}>
                   <input type="checkbox" checked={t.completed} onChange={e => handleComplete(q, i, e.target.checked)} style={{ width: 15, height: 15 }} />
@@ -427,7 +567,7 @@ export default function StyledTaskBoard({ user }) {
                   {/* 右键菜单删除 */}
                   {contextMenu.open && contextMenu.quadrant === q && contextMenu.index === i && (
                     <div style={{position:'fixed',left:contextMenu.x,top:contextMenu.y,background:'#fff',border:'1px solid #eee',borderRadius:8,boxShadow:'0 2px 2px #0002',zIndex:2000,padding:'8px 0',minWidth:60}}>
-                      <div onClick={()=>{handleDelete(q,i);closeContextMenu();}} style={{padding:'10px 10px',cursor:'pointer',color:'#ef4444',fontWeight:600,fontSize:12}}>
+                      <div onClick={async ()=>{await handleDelete(q,i);closeContextMenu();}} style={{padding:'10px 10px',cursor:'pointer',color:'#ef4444',fontWeight:600,fontSize:12}}>
                         删除任务
                       </div>
                     </div>
@@ -498,44 +638,6 @@ export default function StyledTaskBoard({ user }) {
         </div>
       )}
     </div>
-    {/* 已完成弹窗（全局只渲染一次） */}
-    {showCompleted.open && (
-      <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-        <div style={{ background: '#fff', borderRadius: 10, padding: 32, minWidth: 320, boxShadow: '0 4px 24px #0002', maxHeight: 500, overflowY: 'auto' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 16 }}>已完成任务</h3>
-          {tasks[showCompleted.quadrant].filter(t => t.completed && !t.deleted).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>暂无已完成任务</div>}
-          {tasks[showCompleted.quadrant].map((t, i) => t.completed && !t.deleted && (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, fontSize: 15 }}>
-              <span style={{ color: '#374151', textDecoration: 'line-through' }}>{t.text}</span>
-              <div>
-                <button onClick={()=>restoreTask(showCompleted.quadrant, i)} style={{ background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer', marginRight: 8 }}>恢复</button>
-                <button onClick={()=>hardDelete(showCompleted.quadrant, i)} style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>彻底删除</button>
-              </div>
-            </div>
-          ))}
-          <button onClick={()=>setShowCompleted({ open: false, quadrant: '' })} style={{ marginTop: 16, background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600 }}>关闭</button>
-        </div>
-      </div>
-    )}
-    {/* 已删除弹窗（全局只渲染一次） */}
-    {showDeleted.open && (
-      <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-        <div style={{ background: '#fff', borderRadius: 10, padding: 32, minWidth: 320, boxShadow: '0 4px 24px #0002', maxHeight: 500, overflowY: 'auto' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 16 }}>最近删除（7天内）</h3>
-          {tasks[showDeleted.quadrant].filter(t => t.deleted && t.deletedAt && Date.now() - t.deletedAt < SEVEN_DAYS).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>暂无已删除任务</div>}
-          {tasks[showDeleted.quadrant].map((t, i) => t.deleted && t.deletedAt && Date.now() - t.deletedAt < SEVEN_DAYS && (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, fontSize: 15 }}>
-              <span style={{ color: '#b91c1c', textDecoration: 'line-through' }}>{t.text}</span>
-              <div>
-                <button onClick={()=>restoreTask(showDeleted.quadrant, i)} style={{ background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer', marginRight: 8 }}>恢复</button>
-                <button onClick={()=>hardDelete(showDeleted.quadrant, i)} style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 6, padding: '2px 10px', fontSize: 13, cursor: 'pointer' }}>彻底删除</button>
-              </div>
-            </div>
-          ))}
-          <button onClick={()=>setShowDeleted({ open: false, quadrant: '' })} style={{ marginTop: 16, background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600 }}>关闭</button>
-        </div>
-      </div>
-    )}
     {/* 页脚 */}
     <Footer />
   </>

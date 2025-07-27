@@ -33,9 +33,9 @@ export default function App() {
   if (loading) {
     return (
       <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
         height: '100vh',
         fontSize: '18px',
         color: '#666'
@@ -47,7 +47,7 @@ export default function App() {
 
   if (!user) {
     return <AuthForm onAuth={(user) => setUser(user)} />;
-  }
+    }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
@@ -62,7 +62,7 @@ export default function App() {
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
+                    <div style={{
             width: '40px',
             height: '40px',
             borderRadius: '50%',
@@ -73,14 +73,14 @@ export default function App() {
             color: '#fff',
             fontWeight: 'bold',
             fontSize: '16px'
-          }}>
+                    }}>
             {user.email?.charAt(0).toUpperCase()}
-          </div>
+                    </div>
           <div>
             <div style={{ fontSize: '14px', color: '#666' }}>{user.email}</div>
-          </div>
+              </div>
         </div>
-        <button
+          <button 
           onClick={handleLogout}
           style={{
             background: '#ef4444',
@@ -95,13 +95,13 @@ export default function App() {
           }}
           onMouseOver={(e) => e.currentTarget.style.background = '#dc2626'}
           onMouseOut={(e) => e.currentTarget.style.background = '#ef4444'}
-        >
+          >
           登出
-        </button>
+          </button>
       </div>
 
              {/* 主应用内容 */}
        <TaskBoard user={user} />
-     </div>
-   );
- }
+    </div>
+  );
+}
