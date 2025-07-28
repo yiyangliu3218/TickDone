@@ -180,6 +180,7 @@ function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete
   return (
     <div
       ref={setNodeRef}
+      data-task-card="true"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -289,6 +290,7 @@ function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, on
   return (
     <div
       ref={setNodeRef}
+      data-task-card="true"
       style={{
         ...taskCardStyle,
         ...style,
@@ -514,7 +516,7 @@ export default function StyledTaskBoard({ user }) {
   // 列表任务编辑状态
   const [editingListTask, setEditingListTask] = useState(null);
   const [tempListTaskText, setTempListTaskText] = useState('');
-  const [showListAddTask, setShowListAddTask] = useState(false);
+  const [showInlineAddTask, setShowInlineAddTask] = useState(false);
   const [newListTaskText, setNewListTaskText] = useState('');
 
   // 计时器相关状态
@@ -954,7 +956,7 @@ export default function StyledTaskBoard({ user }) {
       const task = await addTask(user.id, 'q1', newListTaskText);
       setTasks(prev => ({ ...prev, q1: [...prev.q1, task] }));
       setNewListTaskText('');
-      setShowListAddTask(false);
+      setShowInlineAddTask(false);
     } catch (error) {
       console.error('添加列表任务失败:', error);
     }
@@ -1180,15 +1182,29 @@ export default function StyledTaskBoard({ user }) {
                 items={tasks[q].map((_, index) => `${q}-${index}`)}
                 strategy={verticalListSortingStrategy}
               >
-                <div style={{
-                  background: quadrantMeta[q].color,
-                  border: `2px solid ${quadrantMeta[q].border}`,
-                  borderRadius: 20,
-                  padding: 32,
-                  minHeight: 400,
-                  position: 'relative',
-                  boxShadow: '0 4px 24px #0001'
-                }}>
+                <div 
+                  style={{
+                    background: quadrantMeta[q].color,
+                    border: `2px solid ${quadrantMeta[q].border}`,
+                    borderRadius: 20,
+                    padding: 32,
+                    minHeight: 400,
+                    position: 'relative',
+                    boxShadow: '0 4px 24px #0001',
+                    cursor: 'default'
+                  }}
+                  onDoubleClick={(e) => {
+                    // 确保双击的不是任务卡片、按钮或其他交互元素
+                    if (e.target === e.currentTarget || 
+                        e.target.tagName === 'DIV' && 
+                        !e.target.closest('[data-task-card]') &&
+                        !e.target.closest('button') &&
+                        !e.target.closest('input')) {
+                      setNewTask(prev => ({ ...prev, [q]: '' }));
+                      setEditing(prev => ({ ...prev, [q]: true }));
+                    }
+                  }}
+                >
                 <h3 style={{
                   textAlign: 'center',
                   fontSize: 18,
@@ -1695,13 +1711,17 @@ export default function StyledTaskBoard({ user }) {
             </div>
           </div>
 
-          <div style={{
-            background: '#fff',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            border: '1px solid #e5e7eb'
-          }}>
+          <div 
+            style={{
+              background: '#fff',
+              borderRadius: '12px',
+              padding: '20px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              border: '1px solid #e5e7eb',
+              minHeight: '400px',
+              position: 'relative'
+            }}
+          >
             {/* 标题栏 */}
             <div style={{
               display: 'flex',
@@ -1719,109 +1739,23 @@ export default function StyledTaskBoard({ user }) {
               }}>
                 进行中的任务 ({pendingTasks.length})
               </h2>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  onClick={() => setShowListAddTask(!showListAddTask)}
-                  style={{
-                    background: '#60a5fa',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '6px 12px',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <FaPlus size={12} />
-                  新建任务
-                </button>
-                <button
-                  onClick={() => setListShowCompleted(!listShowCompleted)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#6b7280',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    padding: '4px 8px',
-                    borderRadius: '4px'
-                  }}
-                >
-                  {listShowCompleted ? '隐藏' : '显示'}
-                </button>
-              </div>
+              <button
+                onClick={() => setListShowCompleted(!listShowCompleted)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  padding: '4px 8px',
+                  borderRadius: '4px'
+                }}
+              >
+                {listShowCompleted ? '隐藏' : '显示'}
+              </button>
             </div>
 
-            {/* 新建任务输入框 */}
-            {showListAddTask && (
-              <div style={{
-                display: 'flex',
-                gap: '8px',
-                marginBottom: '16px',
-                padding: '12px',
-                background: '#f9fafb',
-                borderRadius: '8px',
-                border: '1px solid #e5e7eb'
-              }}>
-                <input
-                  type="text"
-                  value={newListTaskText}
-                  onChange={(e) => setNewListTaskText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleListAddTask();
-                    } else if (e.key === 'Escape') {
-                      setShowListAddTask(false);
-                      setNewListTaskText('');
-                    }
-                  }}
-                  placeholder="输入新任务..."
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
-                  autoFocus
-                />
-                <button
-                  onClick={handleListAddTask}
-                  style={{
-                    background: '#10b981',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '8px 16px',
-                    fontSize: '14px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  添加
-                </button>
-                <button
-                  onClick={() => {
-                    setShowListAddTask(false);
-                    setNewListTaskText('');
-                  }}
-                  style={{
-                    background: '#e5e7eb',
-                    color: '#374151',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '8px 16px',
-                    fontSize: '14px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  取消
-                </button>
-              </div>
-            )}
+
 
             {/* 已完成任务区域 */}
             {completedTasks.length > 0 && listShowCompleted && (
@@ -1948,7 +1882,7 @@ export default function StyledTaskBoard({ user }) {
               items={pendingTasks.map((_, index) => `list-${index}`)}
               strategy={verticalListSortingStrategy}
             >
-                            {pendingTasks.map((task, index) => (
+              {pendingTasks.map((task, index) => (
                 <DraggableListTask
                   key={task.id}
                   task={task}
@@ -1985,6 +1919,95 @@ export default function StyledTaskBoard({ user }) {
                 />
               ))}
             </SortableContext>
+
+            {/* 内联新建任务区域 */}
+            {showInlineAddTask && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px',
+                borderBottom: '1px solid #f3f4f6',
+                background: '#fff',
+                border: '2px solid #60a5fa',
+                borderRadius: '8px',
+                marginTop: '8px'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={false}
+                  readOnly
+                  style={{ cursor: 'default' }}
+                />
+                <input
+                  type="text"
+                  value={newListTaskText}
+                  onChange={(e) => setNewListTaskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleListAddTask();
+                    } else if (e.key === 'Escape') {
+                      setShowInlineAddTask(false);
+                      setNewListTaskText('');
+                    }
+                  }}
+                  placeholder="输入新任务..."
+                  style={{
+                    flex: 1,
+                    fontSize: '14px',
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent'
+                  }}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* 底部空白区域 - 可点击创建新任务 */}
+            <div
+              onClick={() => {
+                if (showInlineAddTask) {
+                  // 如果已经显示新建任务，则隐藏
+                  setShowInlineAddTask(false);
+                  setNewListTaskText('');
+                } else {
+                  // 否则显示新建任务
+                  setShowInlineAddTask(true);
+                  setNewListTaskText('');
+                }
+              }}
+              style={{
+                minHeight: '60px',
+                background: '#fff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderTop: '1px solid #f3f4f6',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => {
+                if (!showInlineAddTask) {
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!showInlineAddTask) {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                }
+              }}
+            >
+              {!showInlineAddTask && (
+                <span style={{
+                  fontSize: '14px',
+                  color: '#9ca3af',
+                  fontStyle: 'italic'
+                }}>
+                  点击此处添加新任务
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <Footer />

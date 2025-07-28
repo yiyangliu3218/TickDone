@@ -155,9 +155,7 @@ export default function App() {
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
                 {user.email}
               </div>
-              <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                欢迎使用任务管理系统
-              </div>
+             
             </div>
           </div>
 
