@@ -5,6 +5,7 @@ import Calendar from './Calendar';
 import CalendarIntegration from './CalendarIntegration';
 import Stats from './Stats';
 import Footer from './Footer';
+import DDLCircle from './DDLCircle';
 import {
   DndContext,
   closestCenter,
@@ -55,83 +56,7 @@ const taskCardStyle = {
   columnGap: '12px'
 };
 
-// DDL圆圈组件
-function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
-  if (!ddlDate && !daysToDDL) {
-    return (
-      <div 
-        onClick={onClick}
-        style={{
-          width: '24px',
-          height: '24px',
-          borderRadius: '50%',
-          border: '2px solid #d1d5db',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          fontSize: '12px',
-          color: '#6b7280',
-          background: '#f9fafb',
-          position: 'relative',
-          zIndex: 2
-        }}
-        title="设置截止日期"
-      >
-        -
-      </div>
-    );
-  }
 
-  const now = new Date();
-  const startDate = createdAt ? new Date(createdAt) : now;
-  const endDate = ddlDate ? new Date(ddlDate) : new Date(startDate.getTime() + (daysToDDL || 0) * 24 * 60 * 60 * 1000);
-  
-  const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-  const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
-  const progress = Math.max(0, Math.min(1, (totalDays - daysLeft) / totalDays));
-  
-  // 颜色判断：1天红色，3天黄色，7天蓝色，其他绿色
-  let color = '#10b981'; // 默认绿色
-  if (daysLeft <= 0) color = '#ef4444'; // 过期红色
-  else if (daysLeft <= 1) color = '#ef4444'; // 1天红色
-  else if (daysLeft <= 3) color = '#f59e0b'; // 3天黄色
-  else if (daysLeft <= 7) color = '#3b82f6'; // 7天蓝色
-  
-  return (
-    <div 
-      onClick={onClick}
-      style={{
-        width: '24px',
-        height: '24px',
-        borderRadius: '50%',
-        border: `2px solid ${color}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        fontSize: '10px',
-        color: color,
-        fontWeight: 'bold',
-        position: 'relative',
-        zIndex: 2
-      }}
-      title={`剩余${daysLeft}天`}
-    >
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderRadius: '50%',
-        background: `conic-gradient(${color} ${progress * 360}deg, transparent ${progress * 360}deg)`,
-        opacity: 0.2
-      }} />
-      <span style={{ zIndex: 1 }}>{daysLeft}</span>
-    </div>
-  );
-}
 
 // 可拖拽空面板组件
 function DroppableEmptyPanel({ quadrant }) {
@@ -1535,7 +1460,21 @@ export default function StyledTaskBoard({ user }) {
                   <input
                     type="date"
                     value={ddlDate}
-                    onChange={(e) => setDDLDate(e.target.value)}
+                    onChange={(e) => {
+                      const selectedDate = e.target.value;
+                      setDDLDate(selectedDate);
+                      // 计算对应的剩余天数
+                      if (selectedDate) {
+                        const targetDate = new Date(selectedDate);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const diffTime = targetDate.getTime() - today.getTime();
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        setDDLDays(diffDays > 0 ? diffDays.toString() : '');
+                      } else {
+                        setDDLDays('');
+                      }
+                    }}
                     style={{
                       width: '100%',
                       padding: '12px',
@@ -1551,7 +1490,21 @@ export default function StyledTaskBoard({ user }) {
                   <input
                     type="number"
                     value={ddlDays}
-                    onChange={(e) => setDDLDays(e.target.value)}
+                    onChange={(e) => {
+                      const days = e.target.value;
+                      setDDLDays(days);
+                      // 计算对应的日期
+                      if (days && parseInt(days) > 0) {
+                        const targetDate = new Date();
+                        targetDate.setDate(targetDate.getDate() + parseInt(days));
+                        const year = targetDate.getFullYear();
+                        const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(targetDate.getDate()).padStart(2, '0');
+                        setDDLDate(`${year}-${month}-${day}`);
+                      } else {
+                        setDDLDate('');
+                      }
+                    }}
                     placeholder="输入天数"
                     min="1"
                     style={{
