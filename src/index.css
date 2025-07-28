@@ -1,17 +1,173 @@
-@import 'https://cdn.tailwindcss.com';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+/* 支持浏览器缩放的基础样式 */
+html {
+  font-size: 16px; /* 基础字体大小 */
   line-height: 1.5;
-  font-weight: 400;
+  /* 确保可以缩放 */
+  -webkit-text-size-adjust: none;
+  -ms-text-size-adjust: none;
 }
 
+/* 确保body可以正常缩放 */
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-weight: 400;
+  /* 确保可以缩放 */
+  -webkit-text-size-adjust: none;
+  -ms-text-size-adjust: none;
 }
 
 #root {
   width: 100%;
   margin: 0 auto;
 }
+
+/* 确保所有元素都能正确缩放 */
+* {
+  box-sizing: border-box;
+}
+
+/* 图标和按钮的缩放支持 */
+svg, img, button, input, select, textarea {
+  /* 移除可能阻止缩放的限制 */
+}
+
+/* 防止文本在缩放时被截断 */
+p, div, span, h1, h2, h3, h4, h5, h6 {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* 默认四象限网格样式 */
+.quadrant-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 20px !important;
+}
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+  .task-card {
+    grid-template-columns: auto 1fr auto !important;
+    column-gap: 8px !important;
+    padding: 8px 10px !important;
+  }
+  
+  .task-card .progress-bar,
+  .task-card .timer-icon {
+    display: none !important;
+  }
+  
+  .quadrant-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 20px !important;
+  }
+  
+  .header-buttons {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  
+  .header-title {
+    font-size: 20px !important;
+    flex: 1 1 200px !important;
+  }
+  
+  .stats-grid {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+  
+  .stats-card {
+    min-width: 100px !important;
+    flex: 1 1 100px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-container {
+    padding: 16px !important;
+  }
+  
+  .quadrant-panel {
+    padding: 16px !important;
+    min-height: 300px !important;
+  }
+  
+  .task-input {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+  }
+  
+  .add-button {
+    padding: 8px 12px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .quadrant-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+/* 支持浏览器缩放的额外样式 */
+.main-container {
+  /* 移除可能阻止缩放的限制 */
+}
+
+/* 确保SVG图标能正确缩放 */
+svg {
+  /* 移除可能阻止缩放的限制 */
+}
+
+/* 按钮在缩放时的样式 */
+button {
+  /* 移除可能阻止缩放的限制 */
+}
+
+/* 输入框在缩放时的样式 */
+input, select, textarea {
+  /* 移除可能阻止缩放的限制 */
+}
+
+/* 确保文本在缩放时保持可读性 */
+@media (max-resolution: 1dppx) {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 测试缩放功能的样式 */
+.zoom-test {
+  font-size: 20px;
+  padding: 20px;
+  border: 2px solid #333;
+  margin: 20px;
+  background: #f0f0f0;
+}
+
+/* 确保滚轮缩放正常工作 */
+html, body {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+/* 确保所有元素都能响应缩放 */
+* {
+  transform-origin: 0 0;
+}
+
+/* 确保文本在缩放时保持可读性 */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+

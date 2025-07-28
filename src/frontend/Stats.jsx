@@ -4,7 +4,7 @@ import Footer from './Footer';
 
 const COLORS = ['#60a5fa', '#f87171', '#34d399', '#fbbf24', '#a78bfa', '#f472b6', '#38bdf8', '#facc15'];
 
-export default function Stats({ onBack }) {
+export default function Stats() {
   const [mode, setMode] = useState('week'); // 'week' or 'day'
   const allTasks = window.tasks || [];
   // 统计区间
@@ -79,9 +79,6 @@ export default function Stats({ onBack }) {
         maxWidth: 1200,
         margin: '0 auto',
         padding: 48,
-        background: '#f8fafc',
-        borderRadius: 24,
-        boxShadow: '0 4px 24px #0001',
         minHeight: '100vh',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif',
         display: 'flex',
@@ -98,9 +95,6 @@ export default function Stats({ onBack }) {
           <button onClick={()=>setMode('day')} style={{background:mode==='day'?'#60a5fa':'#e5e7eb',color:mode==='day'?'#fff':'#374151',border:'none',borderRadius:8,padding:'6px 24px',fontWeight:600,fontSize:15,boxShadow:mode==='day'?'0 2px 8px #60a5fa22':'none',cursor:'pointer'}}>Today</button>
           <button onClick={()=>setMode('week')} style={{background:mode==='week'?'#60a5fa':'#e5e7eb',color:mode==='week'?'#fff':'#374151',border:'none',borderRadius:8,padding:'6px 24px',fontWeight:600,fontSize:15,boxShadow:mode==='week'?'0 2px 8px #60a5fa22':'none',cursor:'pointer'}}>This Week</button>
         </div>
-        <button onClick={onBack} style={{
-          background: '#e0e7ef', color: '#374151', border: 'none', borderRadius: 12, padding: '8px 28px', fontWeight: 600, fontSize: 16, boxShadow: '0 2px 8px #e0e7ef22', cursor: 'pointer', transition: 'box-shadow 0.2s',
-        }} onMouseOver={e => e.currentTarget.style.boxShadow='0 4px 16px #60a5fa33'} onMouseOut={e => e.currentTarget.style.boxShadow='0 2px 8px #e0e7ef22'}>返回</button>
       </div>
       <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 2px 12px #0001', padding: 32, marginBottom: 24 }}>
         <ResponsiveContainer width="100%" height={360}>
