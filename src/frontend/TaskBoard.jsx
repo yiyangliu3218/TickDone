@@ -52,7 +52,9 @@ function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
           cursor: 'pointer',
           fontSize: '12px',
           color: '#6b7280',
-          background: '#f9fafb'
+          background: '#f9fafb',
+          position: 'relative',
+          zIndex: 2
         }}
         title="设置截止日期"
       >
@@ -91,7 +93,8 @@ function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
         fontSize: '10px',
         color: color,
         fontWeight: 'bold',
-        position: 'relative'
+        position: 'relative',
+        zIndex: 2
       }}
       title={`剩余${daysLeft}天`}
     >
@@ -251,6 +254,10 @@ export default function StyledTaskBoard({ user }) {
   const [editingQuadrantTitle, setEditingQuadrantTitle] = useState(null);
   const [tempQuadrantTitle, setTempQuadrantTitle] = useState('');
   const [ddlModal, setDDLModal] = useState({ open: false, quadrant: '', index: -1 });
+  
+  // 列表任务编辑状态
+  const [editingListTask, setEditingListTask] = useState(null);
+  const [tempListTaskText, setTempListTaskText] = useState('');
 
   // 计时器相关状态
   const [focusTimer, setFocusTimer] = useState({ open: false, quadrant: '', index: -1 });
@@ -522,6 +529,30 @@ export default function StyledTaskBoard({ user }) {
     setTempTaskText('');
   };
 
+  // 列表任务编辑相关
+  const startEditListTask = (taskId) => {
+    setEditingListTask(taskId);
+    const task = getAllTasks().find(t => t.id === taskId);
+    setTempListTaskText(task ? task.text : '');
+  };
+
+  const saveEditListTask = async (taskId) => {
+    if (tempListTaskText.trim()) {
+      const task = getAllTasks().find(t => t.id === taskId);
+      if (task) {
+        await updateTask(task.id, { text: tempListTaskText.trim() });
+        setTasks(prev => ({
+          ...prev,
+          [task.quadrant]: prev[task.quadrant].map((t, j) => 
+            t.id === taskId ? { ...t, text: tempListTaskText.trim() } : t
+          )
+        }));
+      }
+    }
+    setEditingListTask(null);
+    setTempListTaskText('');
+  };
+
   const startEditQuadrantTitle = (q) => {
     setEditingQuadrantTitle(q);
     setTempQuadrantTitle(quadrantLabels[q]);
@@ -626,8 +657,8 @@ export default function StyledTaskBoard({ user }) {
               <button
                 onClick={() => setViewMode('quadrant')}
                 style={{
-                  background: '#60a5fa',
-                  color: '#fff',
+                  background: viewMode === 'quadrant' ? '#60a5fa' : '#e5e7eb',
+                  color: viewMode === 'quadrant' ? '#fff' : '#374151',
                   border: 'none',
                   borderRadius: 12,
                   padding: '10px 20px',
@@ -640,8 +671,8 @@ export default function StyledTaskBoard({ user }) {
               <button
                 onClick={() => setViewMode('list')}
                 style={{
-                  background: '#e5e7eb',
-                  color: '#374151',
+                  background: viewMode === 'list' ? '#60a5fa' : '#e5e7eb',
+                  color: viewMode === 'list' ? '#fff' : '#374151',
                   border: 'none',
                   borderRadius: 12,
                   padding: '10px 20px',
@@ -654,8 +685,8 @@ export default function StyledTaskBoard({ user }) {
               <button
                 onClick={() => setViewMode('calendar')}
                 style={{
-                  background: '#e5e7eb',
-                  color: '#374151',
+                  background: viewMode === 'calendar' ? '#60a5fa' : '#e5e7eb',
+                  color: viewMode === 'calendar' ? '#fff' : '#374151',
                   border: 'none',
                   borderRadius: 12,
                   padding: '10px 20px',
@@ -668,8 +699,8 @@ export default function StyledTaskBoard({ user }) {
               <button
                 onClick={() => setViewMode('integration')}
                 style={{
-                  background: '#e5e7eb',
-                  color: '#374151',
+                  background: viewMode === 'integration' ? '#60a5fa' : '#e5e7eb',
+                  color: viewMode === 'integration' ? '#fff' : '#374151',
                   border: 'none',
                   borderRadius: 12,
                   padding: '10px 20px',
@@ -682,8 +713,8 @@ export default function StyledTaskBoard({ user }) {
               <button
                 onClick={() => setViewMode('stats')}
                 style={{
-                  background: '#60a5fa',
-                  color: '#fff',
+                  background: viewMode === 'stats' ? '#60a5fa' : '#e5e7eb',
+                  color: viewMode === 'stats' ? '#fff' : '#374151',
                   border: 'none',
                   borderRadius: 12,
                   padding: '10px 20px',
@@ -715,7 +746,7 @@ export default function StyledTaskBoard({ user }) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <h1 style={{ 
-              fontSize: 28, 
+              fontSize: 24, 
               margin: 0, 
               fontWeight: 600,
               color: '#1f2937',
@@ -1287,13 +1318,49 @@ export default function StyledTaskBoard({ user }) {
                   }}
                   style={{ cursor: 'pointer' }}
                 />
-                <span style={{
-                  flex: 1,
-                  fontSize: '14px',
-                  color: '#6b7280',
-                  textDecoration: 'line-through'
-                }}>
-                  {task.text}
+                <span 
+                  style={{
+                    flex: 1,
+                    fontSize: '14px',
+                    color: '#6b7280',
+                    textDecoration: 'line-through',
+                    cursor: 'pointer'
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startEditListTask(task.id);
+                  }}
+                >
+                  {editingListTask === task.id ? (
+                    <input
+                      value={tempListTaskText}
+                      onChange={(e) => setTempListTaskText(e.target.value)}
+                      onBlur={() => saveEditListTask(task.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          saveEditListTask(task.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingListTask(null);
+                          setTempListTaskText('');
+                        } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                          e.preventDefault();
+                          setTempListTaskText(task.text);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '2px 4px',
+                        border: '1px solid #60a5fa',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        outline: 'none',
+                        textDecoration: 'none'
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    task.text
+                  )}
                 </span>
                 <button
                   onClick={() => {
@@ -1355,12 +1422,47 @@ export default function StyledTaskBoard({ user }) {
                   }}
                   style={{ cursor: 'pointer' }}
                 />
-                <span style={{
-                  flex: 1,
-                  fontSize: '14px',
-                  color: '#1f2937'
-                }}>
-                  {task.text}
+                <span 
+                  style={{
+                    flex: 1,
+                    fontSize: '14px',
+                    color: '#1f2937',
+                    cursor: 'pointer'
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startEditListTask(task.id);
+                  }}
+                >
+                  {editingListTask === task.id ? (
+                    <input
+                      value={tempListTaskText}
+                      onChange={(e) => setTempListTaskText(e.target.value)}
+                      onBlur={() => saveEditListTask(task.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          saveEditListTask(task.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingListTask(null);
+                          setTempListTaskText('');
+                        } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                          e.preventDefault();
+                          setTempListTaskText(task.text);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '2px 4px',
+                        border: '1px solid #60a5fa',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        outline: 'none'
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    task.text
+                  )}
                 </span>
                 <input
                   type="range"
@@ -1377,23 +1479,27 @@ export default function StyledTaskBoard({ user }) {
                     cursor: 'pointer'
                   }}
                 />
-                <DDLCircle
-                  createdAt={task.createdAt}
-                  ddlDate={task.ddlDate}
-                  daysToDDL={task.daysToDDL}
-                  onClick={() => {
-                    const q = task.quadrant;
-                    const i = tasks[q].findIndex(t => t.id === task.id);
-                    openDDLModal(q, i);
-                  }}
-                />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <DDLCircle
+                    createdAt={task.createdAt}
+                    ddlDate={task.ddlDate}
+                    daysToDDL={task.daysToDDL}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const q = task.quadrant;
+                      const i = tasks[q].findIndex(t => t.id === task.id);
+                      openDDLModal(q, i);
+                    }}
+                  />
+                </div>
                 <FaRegClock
                   style={{
                     cursor: 'pointer',
                     color: '#6b7280',
                     fontSize: '14px'
                   }}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     const q = task.quadrant;
                     const i = tasks[q].findIndex(t => t.id === task.id);
                     openTimer(q, i);
