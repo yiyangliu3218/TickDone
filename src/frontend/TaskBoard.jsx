@@ -1431,13 +1431,15 @@ export default function StyledTaskBoard({ user }) {
                     onComplete={(checked) => handleComplete(q, i, checked)}
                     onProgressChange={(value) => handleProgressChange(q, i, value)}
                     onDelete={() => handleDelete(q, i)}
-                    onEdit={() => {
-                      setEditing(`${q}-${i}`);
-                      setTempLabel(t.text);
-                    }}
+                    onEdit={() => startEditTask(q, i)}
                     onTimer={() => openTimer(q, i)}
                     onDDL={() => openDDLModal(q, i)}
                     isDragging={activeId === `${q}-${i}`}
+                    editingTask={editingTask}
+                    tempTaskText={tempTaskText}
+                    setTempTaskText={setTempTaskText}
+                    saveEditTask={saveEditTask}
+                    setEditingTask={setEditingTask}
                   />
                 ))}
                 {/* 空面板拖拽区域 */}
