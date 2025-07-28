@@ -514,6 +514,8 @@ export default function StyledTaskBoard({ user }) {
   // 列表任务编辑状态
   const [editingListTask, setEditingListTask] = useState(null);
   const [tempListTaskText, setTempListTaskText] = useState('');
+  const [showListAddTask, setShowListAddTask] = useState(false);
+  const [newListTaskText, setNewListTaskText] = useState('');
 
   // 计时器相关状态
   const [focusTimer, setFocusTimer] = useState({ open: false, quadrant: '', index: -1 });
@@ -941,6 +943,21 @@ export default function StyledTaskBoard({ user }) {
     }
     setEditingListTask(null);
     setTempListTaskText('');
+  };
+
+  // 列表新建任务处理函数
+  const handleListAddTask = async () => {
+    if (!newListTaskText.trim()) return;
+    
+    try {
+      // 默认添加到第一象限
+      const task = await addTask(user.id, 'q1', newListTaskText);
+      setTasks(prev => ({ ...prev, q1: [...prev.q1, task] }));
+      setNewListTaskText('');
+      setShowListAddTask(false);
+    } catch (error) {
+      console.error('添加列表任务失败:', error);
+    }
   };
 
   const startEditQuadrantTitle = (q) => {
@@ -1702,21 +1719,109 @@ export default function StyledTaskBoard({ user }) {
               }}>
                 进行中的任务 ({pendingTasks.length})
               </h2>
-              <button
-                onClick={() => setListShowCompleted(!listShowCompleted)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#6b7280',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  padding: '4px 8px',
-                  borderRadius: '4px'
-                }}
-              >
-                {listShowCompleted ? '隐藏' : '显示'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={() => setShowListAddTask(!showListAddTask)}
+                  style={{
+                    background: '#60a5fa',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <FaPlus size={12} />
+                  新建任务
+                </button>
+                <button
+                  onClick={() => setListShowCompleted(!listShowCompleted)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '4px 8px',
+                    borderRadius: '4px'
+                  }}
+                >
+                  {listShowCompleted ? '隐藏' : '显示'}
+                </button>
+              </div>
             </div>
+
+            {/* 新建任务输入框 */}
+            {showListAddTask && (
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                marginBottom: '16px',
+                padding: '12px',
+                background: '#f9fafb',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <input
+                  type="text"
+                  value={newListTaskText}
+                  onChange={(e) => setNewListTaskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleListAddTask();
+                    } else if (e.key === 'Escape') {
+                      setShowListAddTask(false);
+                      setNewListTaskText('');
+                    }
+                  }}
+                  placeholder="输入新任务..."
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleListAddTask}
+                  style={{
+                    background: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  添加
+                </button>
+                <button
+                  onClick={() => {
+                    setShowListAddTask(false);
+                    setNewListTaskText('');
+                  }}
+                  style={{
+                    background: '#e5e7eb',
+                    color: '#374151',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  取消
+                </button>
+              </div>
+            )}
 
             {/* 已完成任务区域 */}
             {completedTasks.length > 0 && listShowCompleted && (
