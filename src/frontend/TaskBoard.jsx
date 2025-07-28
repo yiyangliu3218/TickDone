@@ -161,6 +161,115 @@ function DroppableEmptyPanel({ quadrant }) {
   );
 }
 
+// 可拖拽列表任务组件（类似苹果Reminders）
+function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: `list-${index}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '12px',
+        borderBottom: '1px solid #f3f4f6',
+        background: '#fff',
+        cursor: 'grab',
+        userSelect: 'none',
+        position: 'relative',
+        ...style,
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <input
+        type="checkbox"
+        checked={task.completed}
+        onChange={(e) => onComplete(e.target.checked)}
+        onClick={(e) => e.stopPropagation()}
+        style={{ cursor: 'pointer' }}
+      />
+      <span 
+        style={{
+          flex: 1,
+          fontSize: '14px',
+          color: task.completed ? '#6b7280' : '#1f2937',
+          textDecoration: task.completed ? 'line-through' : 'none',
+          cursor: 'pointer'
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onEdit();
+        }}
+      >
+        {task.text}
+      </span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={task.progress || 0}
+        onChange={(e) => onProgressChange(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100px', cursor: 'pointer' }}
+      />
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <DDLCircle
+          createdAt={task.createdAt}
+          ddlDate={task.ddlDate}
+          daysToDDL={task.daysToDDL}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDDL();
+          }}
+        />
+      </div>
+      <FaRegClock
+        style={{
+          cursor: 'pointer',
+          color: '#6b7280',
+          fontSize: '14px'
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onTimer();
+        }}
+      />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#ef4444',
+          cursor: 'pointer',
+          fontSize: '12px',
+          padding: '2px 6px',
+          borderRadius: '4px'
+        }}
+        title="删除任务"
+      >
+        删除
+      </button>
+    </div>
+  );
+}
+
 // 可拖拽任务组件
 function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging }) {
   const {
@@ -501,59 +610,90 @@ export default function StyledTaskBoard({ user }) {
     const { active, over } = event;
     
     if (active && over && active.id !== over.id) {
-      const [sourceQuadrant, sourceIndex] = active.id.split('-');
-      const sourceTask = tasks[sourceQuadrant]?.[parseInt(sourceIndex)];
-      
-      if (sourceTask) {
-        // 检查是否拖拽到空面板
-        if (over.id.startsWith('empty-')) {
-          const targetQuadrant = over.id.replace('empty-', '');
-          if (sourceQuadrant !== targetQuadrant) {
-            // 拖拽到空面板
-            try {
-              await updateTask(sourceTask.id, { quadrant: targetQuadrant });
-              setTasks(prev => {
-                const newTasks = { ...prev };
-                newTasks[sourceQuadrant] = newTasks[sourceQuadrant].filter((_, i) => i !== parseInt(sourceIndex));
-                newTasks[targetQuadrant] = [...newTasks[targetQuadrant], { ...sourceTask, quadrant: targetQuadrant }];
-                return newTasks;
-              });
-            } catch (error) {
-              console.error('拖拽到空面板失败:', error);
+      // 检查是否是列表视图的拖拽
+      if (active.id.startsWith('list-')) {
+        const sourceIndex = parseInt(active.id.replace('list-', ''));
+        const targetIndex = parseInt(over.id.replace('list-', ''));
+        const allTasks = getAllTasks();
+        const pendingTasks = allTasks.filter(task => !task.completed);
+        
+        if (sourceIndex !== targetIndex && pendingTasks[sourceIndex] && pendingTasks[targetIndex]) {
+          // 列表内重新排序
+          try {
+            const newPendingTasks = [...pendingTasks];
+            const [removed] = newPendingTasks.splice(sourceIndex, 1);
+            newPendingTasks.splice(targetIndex, 0, removed);
+            
+            // 更新任务顺序
+            for (let i = 0; i < newPendingTasks.length; i++) {
+              await updateTask(newPendingTasks[i].id, { order: i });
             }
+            
+            // 重新加载任务
+            const data = await getTasks(user.id);
+            const grouped = { q1: [], q2: [], q3: [], q4: [] };
+            data.filter(t => !t.deleted).forEach(t => grouped[t.quadrant].push(t));
+            setTasks(grouped);
+          } catch (error) {
+            console.error('列表重新排序失败:', error);
           }
-        } else {
-          // 拖拽到任务上
-          const [targetQuadrant, targetIndex] = over.id.split('-');
-          
-          if (sourceQuadrant !== targetQuadrant) {
-            // 跨象限拖拽
-            try {
-              await updateTask(sourceTask.id, { quadrant: targetQuadrant });
-              setTasks(prev => {
-                const newTasks = { ...prev };
-                newTasks[sourceQuadrant] = newTasks[sourceQuadrant].filter((_, i) => i !== parseInt(sourceIndex));
-                newTasks[targetQuadrant] = [...newTasks[targetQuadrant], { ...sourceTask, quadrant: targetQuadrant }];
-                return newTasks;
-              });
-            } catch (error) {
-              console.error('拖拽任务失败:', error);
+        }
+      } else {
+        // 四象限视图的拖拽
+        const [sourceQuadrant, sourceIndex] = active.id.split('-');
+        const sourceTask = tasks[sourceQuadrant]?.[parseInt(sourceIndex)];
+        
+        if (sourceTask) {
+          // 检查是否拖拽到空面板
+          if (over.id.startsWith('empty-')) {
+            const targetQuadrant = over.id.replace('empty-', '');
+            if (sourceQuadrant !== targetQuadrant) {
+              // 拖拽到空面板
+              try {
+                await updateTask(sourceTask.id, { quadrant: targetQuadrant });
+                setTasks(prev => {
+                  const newTasks = { ...prev };
+                  newTasks[sourceQuadrant] = newTasks[sourceQuadrant].filter((_, i) => i !== parseInt(sourceIndex));
+                  newTasks[targetQuadrant] = [...newTasks[targetQuadrant], { ...sourceTask, quadrant: targetQuadrant }];
+                  return newTasks;
+                });
+              } catch (error) {
+                console.error('拖拽到空面板失败:', error);
+              }
             }
           } else {
-            // 同象限内排序
-            try {
-              const newTasks = [...tasks[sourceQuadrant]];
-              const [removed] = newTasks.splice(parseInt(sourceIndex), 1);
-              newTasks.splice(parseInt(targetIndex), 0, removed);
-              
-              setTasks(prev => ({ ...prev, [sourceQuadrant]: newTasks }));
-              
-              // 更新所有任务的顺序
-              for (let i = 0; i < newTasks.length; i++) {
-                await updateTask(newTasks[i].id, { order: i });
+            // 拖拽到任务上
+            const [targetQuadrant, targetIndex] = over.id.split('-');
+            
+            if (sourceQuadrant !== targetQuadrant) {
+              // 跨象限拖拽
+              try {
+                await updateTask(sourceTask.id, { quadrant: targetQuadrant });
+                setTasks(prev => {
+                  const newTasks = { ...prev };
+                  newTasks[sourceQuadrant] = newTasks[sourceQuadrant].filter((_, i) => i !== parseInt(sourceIndex));
+                  newTasks[targetQuadrant] = [...newTasks[targetQuadrant], { ...sourceTask, quadrant: targetQuadrant }];
+                  return newTasks;
+                });
+              } catch (error) {
+                console.error('拖拽任务失败:', error);
               }
-            } catch (error) {
-              console.error('重新排序任务失败:', error);
+            } else {
+              // 同象限内排序
+              try {
+                const newTasks = [...tasks[sourceQuadrant]];
+                const [removed] = newTasks.splice(parseInt(sourceIndex), 1);
+                newTasks.splice(parseInt(targetIndex), 0, removed);
+                
+                setTasks(prev => ({ ...prev, [sourceQuadrant]: newTasks }));
+                
+                // 更新所有任务的顺序
+                for (let i = 0; i < newTasks.length; i++) {
+                  await updateTask(newTasks[i].id, { order: i });
+                }
+              } catch (error) {
+                console.error('重新排序任务失败:', error);
+              }
             }
           }
         }
@@ -1434,7 +1574,13 @@ export default function StyledTaskBoard({ user }) {
     const pendingTasks = allTasks.filter(task => !task.completed);
 
     return (
-      <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+      >
         <div style={{ 
           maxWidth: 1200, 
           margin: '0 auto', 
@@ -1693,128 +1839,47 @@ export default function StyledTaskBoard({ user }) {
             ))}
 
             {/* 待完成任务列表 */}
-            {pendingTasks.map((task, index) => (
-              <div key={task.id} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                borderBottom: '1px solid #f3f4f6'
-              }}>
-                <input
-                  type="checkbox"
-                  checked={task.completed}
-                  onChange={(e) => {
+            <SortableContext
+              items={pendingTasks.map((_, index) => `list-${index}`)}
+              strategy={verticalListSortingStrategy}
+            >
+                            {pendingTasks.map((task, index) => (
+                <DraggableListTask
+                  key={task.id}
+                  task={task}
+                  index={index}
+                  onComplete={(checked) => {
                     const q = task.quadrant;
                     const i = tasks[q].findIndex(t => t.id === task.id);
-                    handleComplete(q, i, e.target.checked);
+                    handleComplete(q, i, checked);
                   }}
-                  style={{ cursor: 'pointer' }}
-                />
-                <span 
-                  style={{
-                    flex: 1,
-                    fontSize: '14px',
-                    color: '#1f2937',
-                    cursor: 'pointer'
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    startEditListTask(task.id);
-                  }}
-                >
-                  {editingListTask === task.id ? (
-                    <input
-                      value={tempListTaskText}
-                      onChange={(e) => setTempListTaskText(e.target.value)}
-                      onBlur={() => saveEditListTask(task.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          saveEditListTask(task.id);
-                        } else if (e.key === 'Escape') {
-                          setEditingListTask(null);
-                          setTempListTaskText('');
-                        } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-                          e.preventDefault();
-                          setTempListTaskText(task.text);
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '2px 4px',
-                        border: '1px solid #60a5fa',
-                        borderRadius: '4px',
-                        fontSize: '14px',
-                        outline: 'none'
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    task.text
-                  )}
-                </span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={task.progress || 0}
-                  onChange={(e) => {
+                  onProgressChange={(value) => {
                     const q = task.quadrant;
                     const i = tasks[q].findIndex(t => t.id === task.id);
-                    handleProgressChange(q, i, e.target.value);
+                    handleProgressChange(q, i, value);
                   }}
-                  style={{
-                    width: '100px',
-                    cursor: 'pointer'
-                  }}
-                />
-                <div style={{ position: 'relative', zIndex: 1 }}>
-                  <DDLCircle
-                    createdAt={task.createdAt}
-                    ddlDate={task.ddlDate}
-                    daysToDDL={task.daysToDDL}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const q = task.quadrant;
-                      const i = tasks[q].findIndex(t => t.id === task.id);
-                      openDDLModal(q, i);
-                    }}
-                  />
-                </div>
-                <FaRegClock
-                  style={{
-                    cursor: 'pointer',
-                    color: '#6b7280',
-                    fontSize: '14px'
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const q = task.quadrant;
-                    const i = tasks[q].findIndex(t => t.id === task.id);
-                    openTimer(q, i);
-                  }}
-                />
-                <button
-                  onClick={() => {
+                  onDelete={() => {
                     const q = task.quadrant;
                     const i = tasks[q].findIndex(t => t.id === task.id);
                     handleDelete(q, i);
                   }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#ef4444',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    padding: '2px 6px',
-                    borderRadius: '4px'
+                  onEdit={() => {
+                    startEditListTask(task.id);
                   }}
-                  title="删除任务"
-                >
-                  删除
-                </button>
-              </div>
-            ))}
+                  onTimer={() => {
+                    const q = task.quadrant;
+                    const i = tasks[q].findIndex(t => t.id === task.id);
+                    openTimer(q, i);
+                  }}
+                  onDDL={() => {
+                    const q = task.quadrant;
+                    const i = tasks[q].findIndex(t => t.id === task.id);
+                    openDDLModal(q, i);
+                  }}
+                  isDragging={activeId === `list-${index}`}
+                />
+              ))}
+            </SortableContext>
           </div>
         </div>
         <Footer />
@@ -1828,7 +1893,68 @@ export default function StyledTaskBoard({ user }) {
           running={timerState.running}
           elapsed={timerState.elapsed}
         />
-      </>
+        <DragOverlay>
+          {draggedTask ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px',
+              borderBottom: '1px solid #f3f4f6',
+              background: '#fff',
+              opacity: 0.8,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+            }}>
+              <input
+                type="checkbox"
+                checked={draggedTask.completed}
+                readOnly
+                style={{ cursor: 'pointer' }}
+              />
+              <span style={{
+                flex: 1,
+                fontSize: '14px',
+                color: draggedTask.completed ? '#6b7280' : '#1f2937',
+                textDecoration: draggedTask.completed ? 'line-through' : 'none',
+              }}>
+                {draggedTask.text}
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={draggedTask.progress || 0}
+                readOnly
+                style={{ width: '100px', cursor: 'pointer' }}
+              />
+              <DDLCircle
+                createdAt={draggedTask.createdAt}
+                ddlDate={draggedTask.ddlDate}
+                daysToDDL={draggedTask.daysToDDL}
+                onClick={() => {}}
+              />
+              <FaRegClock
+                style={{
+                  color: '#6b7280',
+                  fontSize: '14px'
+                }}
+              />
+              <button
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  padding: '2px 6px',
+                  borderRadius: '4px'
+                }}
+              >
+                删除
+              </button>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     );
   }
 
