@@ -162,7 +162,7 @@ function DroppableEmptyPanel({ quadrant }) {
 }
 
 // 可拖拽列表任务组件（类似苹果Reminders）
-function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging }) {
+function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging, editingListTask, tempListTaskText, setTempListTaskText, saveEditListTask, setEditingListTask }) {
   const {
     attributes,
     listeners,
@@ -216,7 +216,36 @@ function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete
           onEdit();
         }}
       >
-        {task.text}
+        {editingListTask === task.id ? (
+          <input
+            value={tempListTaskText}
+            onChange={(e) => setTempListTaskText(e.target.value)}
+            onBlur={() => saveEditListTask(task.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                saveEditListTask(task.id);
+              } else if (e.key === 'Escape') {
+                setEditingListTask(null);
+                setTempListTaskText('');
+              } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                setTempListTaskText(task.text);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '2px 4px',
+              border: '1px solid #60a5fa',
+              borderRadius: '4px',
+              fontSize: '14px',
+              outline: 'none',
+              textDecoration: 'none'
+            }}
+            autoFocus
+          />
+        ) : (
+          task.text
+        )}
       </span>
       <input
         type="range"
@@ -272,7 +301,7 @@ function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete
 }
 
 // 可拖拽任务组件
-function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging }) {
+function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging, editingTask, tempTaskText, setTempTaskText, saveEditTask, setEditingTask }) {
   const {
     attributes,
     listeners,
@@ -318,7 +347,36 @@ function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, on
           onEdit();
         }}
       >
-        {task.text}
+        {editingTask === `${quadrant}-${index}` ? (
+          <input
+            value={tempTaskText}
+            onChange={(e) => setTempTaskText(e.target.value)}
+            onBlur={() => saveEditTask(quadrant, index)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                saveEditTask(quadrant, index);
+              } else if (e.key === 'Escape') {
+                setEditingTask(null);
+                setTempTaskText('');
+              } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                setTempTaskText(task.text);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '2px 4px',
+              border: '1px solid #60a5fa',
+              borderRadius: '4px',
+              fontSize: '14px',
+              outline: 'none',
+              textDecoration: 'none'
+            }}
+            autoFocus
+          />
+        ) : (
+          task.text
+        )}
       </span>
       <input
         type="range"
@@ -518,6 +576,7 @@ export default function StyledTaskBoard({ user }) {
   const [tempListTaskText, setTempListTaskText] = useState('');
   const [showInlineAddTask, setShowInlineAddTask] = useState(false);
   const [newListTaskText, setNewListTaskText] = useState('');
+  const [listSortBy, setListSortBy] = useState('ddl'); // 'ddl', 'created', 'name', 'progress'
 
   // 计时器相关状态
   const [focusTimer, setFocusTimer] = useState({ open: false, quadrant: '', index: -1 });
@@ -947,6 +1006,41 @@ export default function StyledTaskBoard({ user }) {
     setTempListTaskText('');
   };
 
+  // 列表任务排序函数
+  const sortTasks = (taskList) => {
+    return [...taskList].sort((a, b) => {
+      switch (listSortBy) {
+        case 'ddl':
+          // 按DDL日期排序，有DDL的优先，然后按日期升序
+          const aHasDDL = a.ddlDate && a.ddlDate !== '';
+          const bHasDDL = b.ddlDate && b.ddlDate !== '';
+          
+          if (aHasDDL && !bHasDDL) return -1;
+          if (!aHasDDL && bHasDDL) return 1;
+          if (!aHasDDL && !bHasDDL) return 0;
+          
+          return new Date(a.ddlDate) - new Date(b.ddlDate);
+          
+        case 'created':
+          // 按创建时间排序，最新的在前
+          return new Date(b.createdAt) - new Date(a.createdAt);
+          
+        case 'name':
+          // 按任务名称字母顺序排序
+          return a.text.localeCompare(b.text);
+          
+        case 'progress':
+          // 按进度排序，进度高的在前
+          const aProgress = a.progress || 0;
+          const bProgress = b.progress || 0;
+          return bProgress - aProgress;
+          
+        default:
+          return 0;
+      }
+    });
+  };
+
   // 列表新建任务处理函数
   const handleListAddTask = async () => {
     if (!newListTaskText.trim()) return;
@@ -1337,13 +1431,15 @@ export default function StyledTaskBoard({ user }) {
                     onComplete={(checked) => handleComplete(q, i, checked)}
                     onProgressChange={(value) => handleProgressChange(q, i, value)}
                     onDelete={() => handleDelete(q, i)}
-                    onEdit={() => {
-                      setEditing(`${q}-${i}`);
-                      setTempLabel(t.text);
-                    }}
+                    onEdit={() => startEditTask(q, i)}
                     onTimer={() => openTimer(q, i)}
                     onDDL={() => openDDLModal(q, i)}
                     isDragging={activeId === `${q}-${i}`}
+                    editingTask={editingTask}
+                    tempTaskText={tempTaskText}
+                    setTempTaskText={setTempTaskText}
+                    saveEditTask={saveEditTask}
+                    setEditingTask={setEditingTask}
                   />
                 ))}
                 {/* 空面板拖拽区域 */}
@@ -1604,7 +1700,7 @@ export default function StyledTaskBoard({ user }) {
   if (viewMode === 'list') {
     const allTasks = getAllTasks();
     const completedTasks = allTasks.filter(task => task.completed);
-    const pendingTasks = allTasks.filter(task => !task.completed);
+    const pendingTasks = sortTasks(allTasks.filter(task => !task.completed));
 
     return (
       <DndContext
@@ -1739,20 +1835,39 @@ export default function StyledTaskBoard({ user }) {
               }}>
                 进行中的任务 ({pendingTasks.length})
               </h2>
-              <button
-                onClick={() => setListShowCompleted(!listShowCompleted)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#6b7280',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  padding: '4px 8px',
-                  borderRadius: '4px'
-                }}
-              >
-                {listShowCompleted ? '隐藏' : '显示'}
-              </button>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <select
+                  value={listSortBy}
+                  onChange={(e) => setListSortBy(e.target.value)}
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    background: '#fff',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="ddl">按DDL排序</option>
+                  <option value="created">按创建时间</option>
+                  <option value="name">按名称排序</option>
+                  <option value="progress">按进度排序</option>
+                </select>
+                <button
+                  onClick={() => setListShowCompleted(!listShowCompleted)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '4px 8px',
+                    borderRadius: '4px'
+                  }}
+                >
+                  {listShowCompleted ? '隐藏' : '显示'}
+                </button>
+              </div>
             </div>
 
 
@@ -1916,6 +2031,11 @@ export default function StyledTaskBoard({ user }) {
                     openDDLModal(q, i);
                   }}
                   isDragging={activeId === `list-${index}`}
+                  editingListTask={editingListTask}
+                  tempListTaskText={tempListTaskText}
+                  setTempListTaskText={setTempListTaskText}
+                  saveEditListTask={saveEditListTask}
+                  setEditingListTask={setEditingListTask}
                 />
               ))}
             </SortableContext>
