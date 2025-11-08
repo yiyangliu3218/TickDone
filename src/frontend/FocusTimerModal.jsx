@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 export default function FocusTimerModal({ open, onClose, task, onStart, onPause, onStop, running, elapsed }) {
   if (!open) return null;
@@ -9,9 +9,19 @@ export default function FocusTimerModal({ open, onClose, task, onStart, onPause,
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
   
-  const total = (task.timeRecords || []).reduce((sum, r) => 
-    sum + (r.end && r.start ? Math.floor((r.end - r.start) / 1000) : 0), 0
-  ) + (running ? elapsed : 0);
+  // 使用 useMemo 避免每次都重新计算
+  const completedTime = useMemo(() => {
+    return (task.timeRecords || []).reduce((sum, r) => {
+      // 只计算已完成的记录（有 end 时间的）
+      if (r.end && r.start) {
+        return sum + Math.floor((r.end - r.start) / 1000);
+      }
+      return sum;
+    }, 0);
+  }, [task.timeRecords]);
+  
+  // 当前总时间 = 历史完成时间 + 当前这次的 elapsed
+  const total = completedTime + elapsed;
   
   return (
     <div style={{
@@ -54,7 +64,8 @@ export default function FocusTimerModal({ open, onClose, task, onStart, onPause,
                   border: 'none',
                   borderRadius: 4,
                   padding: '6px 18px',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
                 暂停
@@ -67,7 +78,8 @@ export default function FocusTimerModal({ open, onClose, task, onStart, onPause,
                   border: 'none',
                   borderRadius: 4,
                   padding: '6px 18px',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
                 结束
@@ -82,10 +94,11 @@ export default function FocusTimerModal({ open, onClose, task, onStart, onPause,
                 border: 'none',
                 borderRadius: 4,
                 padding: '6px 18px',
-                fontWeight: 600
+                fontWeight: 600,
+                cursor: 'pointer'
               }}
             >
-              开始
+              {elapsed > 0 ? '继续' : '开始'}
             </button>
           )}
           <button 
@@ -96,7 +109,8 @@ export default function FocusTimerModal({ open, onClose, task, onStart, onPause,
               color: '#374151',
               border: 'none',
               borderRadius: 4,
-              padding: '6px 18px'
+              padding: '6px 18px',
+              cursor: 'pointer'
             }}
           >
             关闭
@@ -105,4 +119,4 @@ export default function FocusTimerModal({ open, onClose, task, onStart, onPause,
       </div>
     </div>
   );
-} 
+}

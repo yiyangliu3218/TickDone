@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { getTasks, addTask, updateTask, removeTask } from '../backend/taskApi';
 import { FaPlus, FaRegClock } from 'react-icons/fa';
 import Calendar from './Calendar';
@@ -42,6 +42,358 @@ const inputStyle = {
   fontSize: '14px',
   flex: 1,
 };
+
+// 格式化时间函数
+const fmtTime = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+// 独立的计时器显示组件，避免整个列表重新渲染
+const TimerDisplay = memo(({ taskId, timer, task, pauseTimer, resumeTimer, stopTimer }) => {
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+  
+  useEffect(() => {
+    if (timer.running && timer.start) {
+      // 计算当前已过时间：之前的累计时间 + 本次会话的时间
+      const updateTime = () => {
+        const previousElapsed = timer.elapsed || 0;
+        const sessionElapsed = Math.floor((Date.now() - timer.start) / 1000);
+        setDisplaySeconds(previousElapsed + sessionElapsed);
+      };
+      
+      // 立即更新一次
+      updateTime();
+      
+      // 每秒更新
+      const interval = setInterval(updateTime, 1000);
+      return () => clearInterval(interval);
+    } else {
+      // 暂停状态：显示累计时间
+      setDisplaySeconds(timer.elapsed || 0);
+    }
+  }, [timer.running, timer.start, timer.elapsed]);
+  
+  const displayTime = fmtTime(displaySeconds);
+  
+  return (
+    <div
+      style={{
+        padding: '12px',
+        marginBottom: '8px',
+        background: '#f9fafb',
+        borderRadius: '8px',
+        border: '1px solid #e5e7eb',
+      }}
+    >
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '8px'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          flex: 1
+        }}>
+          <div style={{ fontSize: '18px' }}>
+            {timer.running ? '⏰' : '⏸️'}
+          </div>
+          <span style={{
+            fontSize: '14px',
+            fontWeight: 500,
+            color: '#1f2937',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1
+          }}>
+            {task.text}
+          </span>
+        </div>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        marginBottom: '8px',
+        height: '28px'
+      }}>
+        <span style={{
+          fontSize: '20px',
+          fontWeight: 700,
+          color: timer.running ? '#10b981' : '#6b7280',
+          fontFamily: 'monospace'
+        }}>
+          {displayTime}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        {timer.running ? (
+          <button
+            onClick={() => pauseTimer(taskId)}
+            style={{
+              flex: 1,
+              padding: '6px 12px',
+              background: '#f59e0b',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500
+            }}
+          >
+            暂停
+          </button>
+        ) : (
+          <button
+            onClick={() => resumeTimer(taskId)}
+            style={{
+              flex: 1,
+              padding: '6px 12px',
+              background: '#10b981',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500
+            }}
+          >
+            继续
+          </button>
+        )}
+        <button
+          onClick={() => stopTimer(taskId)}
+          style={{
+            flex: 1,
+            padding: '6px 12px',
+            background: '#ef4444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 500
+          }}
+        >
+          结束
+        </button>
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // 优化渲染：只在关键属性变化时重新渲染
+  return (
+    prevProps.timer.running === nextProps.timer.running &&
+    prevProps.timer.start === nextProps.timer.start &&
+    prevProps.timer.elapsed === nextProps.timer.elapsed &&
+    prevProps.task.text === nextProps.task.text &&
+    prevProps.taskId === nextProps.taskId
+  );
+});
+
+// 独立的浮动按钮组件，避免因父组件重新渲染而重新创建
+const TimerFloatingButton = memo(({ 
+  activeTimers, 
+  showTimerPanel, 
+  setShowTimerPanel, 
+  tasks, 
+  pauseTimer, 
+  resumeTimer, 
+  stopTimer 
+}) => {
+  const activeTimerCount = Object.keys(activeTimers || {}).length;
+  
+  return (
+    <>
+      {/* 浮动按钮 - 显示进行中的任务 */}
+      <div
+        style={{
+          position: 'fixed',
+          top: '80px',
+          right: '20px',
+          zIndex: 999,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+      >
+        <button
+          onClick={() => setShowTimerPanel(!showTimerPanel)}
+          disabled={activeTimerCount === 0}
+          style={{
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            background: activeTimerCount > 0 
+              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+              : 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+            border: 'none',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: activeTimerCount > 0 ? 'pointer' : 'default',
+            boxShadow: activeTimerCount > 0 
+              ? '0 4px 20px rgba(102, 126, 234, 0.4)' 
+              : '0 2px 10px rgba(0, 0, 0, 0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '2px',
+            transition: 'all 0.3s ease',
+            transform: showTimerPanel ? 'scale(0.95)' : 'scale(1)',
+            opacity: activeTimerCount === 0 ? 0.6 : 1
+          }}
+          onMouseEnter={(e) => {
+            if (activeTimerCount > 0) {
+              e.currentTarget.style.transform = 'scale(1.1)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = showTimerPanel ? 'scale(0.95)' : 'scale(1)';
+          }}
+        >
+          <div style={{ fontSize: '18px' }}>⏱️</div>
+          <div>进行中</div>
+          {activeTimerCount > 1 && (
+            <div style={{
+              position: 'absolute',
+              top: '-5px',
+              right: '-5px',
+              background: '#ef4444',
+              borderRadius: '50%',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '10px',
+              fontWeight: 'bold'
+            }}>
+              {activeTimerCount}
+            </div>
+          )}
+        </button>
+
+        {/* 展开面板 */}
+        {showTimerPanel && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '70px',
+              right: 0,
+              width: '320px',
+              maxHeight: '500px',
+              background: '#fff',
+              borderRadius: '16px',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+              padding: '16px',
+              overflowY: 'auto',
+              animation: 'slideDown 0.3s ease-out',
+              zIndex: 1000
+            }}
+          >
+            <style>{`
+              @keyframes slideDown {
+                from {
+                  opacity: 0;
+                  transform: translateY(-10px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+              @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.6; }
+              }
+              .clock-icon {
+                display: inline-block;
+                backface-visibility: hidden;
+                transform: translateZ(0);
+              }
+              .clock-icon.running {
+                animation: pulse 1.5s ease-in-out infinite;
+              }
+            `}</style>
+            <div style={{
+              fontSize: '16px',
+              fontWeight: 600,
+              marginBottom: '12px',
+              color: '#1f2937',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span>正在追踪 ({activeTimerCount})</span>
+              <button
+                onClick={() => setShowTimerPanel(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#6b7280'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {Object.entries(activeTimers || {}).map(([taskId, timer]) => {
+              if (!timer || !timer.quadrant || timer.index === undefined) return null;
+              if (!tasks || !tasks[timer.quadrant]) return null;
+              const task = tasks[timer.quadrant][timer.index];
+              if (!task) return null;
+              return (
+                <TimerDisplay
+                  key={taskId}
+                  taskId={taskId}
+                  timer={timer}
+                  task={task}
+                  pauseTimer={pauseTimer}
+                  resumeTimer={resumeTimer}
+                  stopTimer={stopTimer}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}, (prevProps, nextProps) => {
+  // 优化：只在关键 props 变化时重新渲染
+  // 比较 showTimerPanel
+  if (prevProps.showTimerPanel !== nextProps.showTimerPanel) return false;
+  
+  // 比较 activeTimers 的数量
+  const prevCount = Object.keys(prevProps.activeTimers || {}).length;
+  const nextCount = Object.keys(nextProps.activeTimers || {}).length;
+  if (prevCount !== nextCount) return false;
+  
+  // 比较 tasks 引用（如果 tasks 对象引用相同，说明没有变化）
+  if (prevProps.tasks !== nextProps.tasks) return false;
+  
+  // 如果 activeTimers 对象引用相同，说明没有变化
+  if (prevProps.activeTimers === nextProps.activeTimers) return true;
+  
+  // 比较函数引用（这些应该是稳定的 useCallback）
+  if (prevProps.pauseTimer !== nextProps.pauseTimer ||
+      prevProps.resumeTimer !== nextProps.resumeTimer ||
+      prevProps.stopTimer !== nextProps.stopTimer) {
+    return false;
+  }
+  
+  // 如果到这里，说明 props 基本相等，可以跳过重新渲染
+  // 但为了安全，如果 activeTimers 对象引用不同，我们仍然重新渲染
+  // 因为 TimerDisplay 内部会通过 memo 进一步优化
+  return false; // 让面板重新渲染，但内部的 TimerDisplay 会被优化
+});
 
 const taskCardStyle = {
   background: '#fff',
@@ -316,7 +668,7 @@ function DraggableListTask({ task, index, onComplete, onProgressChange, onDelete
 }
 
 // 可拖拽任务组件
-function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging, editingTask, tempTaskText, setTempTaskText, saveEditTask, setEditingTask }) {
+function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, onDelete, onEdit, onTimer, onDDL, isDragging, editingTask, tempTaskText, setTempTaskText, saveEditTask, setEditingTask, isActive, isCollapsed }) {
   const {
     attributes,
     listeners,
@@ -325,10 +677,18 @@ function DraggableTask({ task, quadrant, index, onComplete, onProgressChange, on
     transition,
   } = useSortable({ id: `${quadrant}-${index}` });
 
+  const baseTransform = CSS.Transform.toString(transform);
+  const collapsedTransform = isCollapsed 
+    ? baseTransform + ' scale(0.3) translateY(-200px)' 
+    : baseTransform;
+  
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
+    transform: collapsedTransform,
+    transition: isCollapsed ? 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' : transition,
+    opacity: isDragging ? 0.5 : (isCollapsed ? 0.3 : 1),
+    position: isCollapsed ? 'fixed' : 'relative',
+    zIndex: isCollapsed ? 1000 : 'auto',
+    pointerEvents: isCollapsed ? 'none' : 'auto',
   };
 
   return (
@@ -537,7 +897,7 @@ function FocusTimerModal({ open, onClose, task, onStart, onPause, onStop, runnin
               cursor: 'pointer'
             }}
           >
-            停止
+            结束
           </button>
           
           <button
@@ -593,10 +953,16 @@ export default function StyledTaskBoard({ user }) {
   const [newListTaskText, setNewListTaskText] = useState('');
   const [listSortBy, setListSortBy] = useState('ddl'); // 'ddl', 'created', 'name', 'progress'
 
-  // 计时器相关状态
+  // 计时器相关状态 - 支持多任务同时计时
   const [focusTimer, setFocusTimer] = useState({ open: false, quadrant: '', index: -1 });
   const [timerState, setTimerState] = useState({ running: false, start: null, elapsed: 0 });
   const timerRef = useRef();
+  
+  // 多任务计时状态：{ taskId: { running: boolean, start: number, elapsed: number, quadrant: string, index: number } }
+  const [activeTimers, setActiveTimers] = useState({});
+  const activeTimersRef = useRef({});
+  const [showTimerPanel, setShowTimerPanel] = useState(false);
+  const [collapsedTaskId, setCollapsedTaskId] = useState(null);
 
   // DDL编辑状态
   const [ddlEdit, setDDLEdit] = useState({ open: false, quadrant: '', index: -1 });
@@ -611,6 +977,9 @@ export default function StyledTaskBoard({ user }) {
   // 拖拽相关状态
   const [activeId, setActiveId] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
+  
+  // 过滤选项：仅显示有时长的任务
+  const [showOnlyTimedTasks, setShowOnlyTimedTasks] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -619,12 +988,22 @@ export default function StyledTaskBoard({ user }) {
       const grouped = { q1: [], q2: [], q3: [], q4: [] };
       data.filter(t => !t.deleted).forEach(t => grouped[t.quadrant].push(t));
       setTasks(grouped);
+      // 同步到 window.tasks 供 Stats 组件使用
+      window.tasks = Object.values(grouped).flat();
+      window.quadrantLabels = quadrantLabels;
       setLoading(false);
     }).catch(error => {
       console.error('加载任务失败:', error);
       setLoading(false);
     });
   }, [user]);
+
+  // 当 tasks 或 quadrantLabels 更新时，同步到 window
+  useEffect(() => {
+    window.tasks = Object.values(tasks).flat();
+    window.quadrantLabels = quadrantLabels;
+  }, [tasks, quadrantLabels]);
+
 
   const handleAdd = async (q) => {
     if (!newTask[q].trim()) return;
@@ -877,6 +1256,18 @@ export default function StyledTaskBoard({ user }) {
     return Object.values(tasks).flat();
   };
 
+  // 计算任务的总时长（分钟）
+  const getTaskTotalTime = (task) => {
+    if (!task.timeRecords || task.timeRecords.length === 0) return 0;
+    let total = 0;
+    task.timeRecords.forEach(record => {
+      if (record.start && record.end) {
+        total += (record.end - record.start); // 毫秒
+      }
+    });
+    return total / (1000 * 60); // 转换为分钟
+  };
+
   // 统计未完成未删除任务数
   const getActiveCount = q => tasks[q].filter(t => !t.completed && !t.deleted).length;
   
@@ -921,58 +1312,182 @@ export default function StyledTaskBoard({ user }) {
     }
   };
 
-  const startTimer = () => {
-    setTimerState({ running: true, start: Date.now(), elapsed: 0 });
-    timerRef.current = setInterval(() => {
-      setTimerState(s => ({ ...s, elapsed: Math.floor((Date.now() - s.start)/1000) }));
-    }, 1000);
-    setTasks(prev => {
-      const { quadrant, index } = focusTimer;
-      return {
-        ...prev,
-        [quadrant]: prev[quadrant].map((task, i) =>
-          i === index ? { ...task, timeRecords: [...(task.timeRecords||[]), { start: Date.now() }] } : task
-        )
-      };
-    });
-  };
+  // 全局计时器更新循环已移除
+  // TimerDisplay 组件内部自己管理时间更新，避免全局状态更新导致的重新渲染
 
-  const pauseTimer = () => {
-    clearInterval(timerRef.current);
-    setTimerState(s => ({ ...s, running: false }));
+  // 开始计时（支持多任务）
+  const startTimer = useCallback((q, i) => {
+    const task = tasks[q][i];
+    if (!task) return;
+    
+    const taskId = task.id;
+    const startTime = Date.now();
+    
+    // 更新任务记录
     setTasks(prev => {
-      const { quadrant, index } = focusTimer;
-      return {
-        ...prev,
-        [quadrant]: prev[quadrant].map((task, i) => {
-          if (i !== index) return task;
-          const recs = [...(task.timeRecords||[])];
-          if (recs.length && !recs[recs.length-1].end) recs[recs.length-1].end = Date.now();
-          return { ...task, timeRecords: recs };
-        })
-      };
+      const updated = { ...prev };
+      updated[q] = prev[q].map((t, idx) =>
+        idx === i ? { ...t, timeRecords: [...(t.timeRecords||[]), { start: startTime }] } : t
+      );
+      return updated;
     });
-  };
+    
+    // 添加到活跃计时器
+    setActiveTimers(prev => ({
+      ...prev,
+      [taskId]: {
+        running: true,
+        start: startTime,
+        elapsed: 0,
+        quadrant: q,
+        index: i
+      }
+    }));
+    
+    // 触发卡片缩小动画
+    setCollapsedTaskId(taskId);
+    
+    // 3秒后恢复卡片显示（动画完成后）
+    setTimeout(() => {
+      setCollapsedTaskId(null);
+    }, 500);
+  }, [tasks, activeTimers]);
 
-  const stopTimer = async () => {
-    clearInterval(timerRef.current);
-    setTimerState({ running: false, start: null, elapsed: 0 });
+  // 暂停计时（支持多任务）
+  const pauseTimer = useCallback(async (taskId) => {
+    const timer = activeTimers[taskId];
+    if (!timer) return;
+    
+    const { quadrant, index } = timer;
+    const task = tasks[quadrant]?.[index];
+    if (!task) return;
+    
+    // 计算累计时间：之前的 elapsed + 从 start 到现在的时间
+    const now = Date.now();
+    const currentElapsed = timer.elapsed || 0;
+    const sessionElapsed = timer.start ? Math.floor((now - timer.start) / 1000) : 0;
+    const totalElapsed = currentElapsed + sessionElapsed;
+    
+    const recs = [...(task.timeRecords||[])];
+    if (recs.length && !recs[recs.length-1].end) {
+      recs[recs.length-1].end = now;
+      try {
+        await updateTask(task.id, { timeRecords: recs });
+      } catch (error) {
+        console.error('保存计时记录失败:', error);
+      }
+    }
+    
+    setTasks(prev => ({
+      ...prev,
+      [quadrant]: prev[quadrant].map((t, i) => 
+        i === index ? { ...t, timeRecords: recs } : t
+      )
+    }));
+    
+    // 更新计时器状态为暂停，保存累计时间
+    setActiveTimers(prev => ({
+      ...prev,
+      [taskId]: {
+        ...prev[taskId],
+        running: false,
+        elapsed: totalElapsed,
+        start: null // 清除 start，因为已经暂停
+      }
+    }));
+  }, [activeTimers, tasks]);
+  
+  // 恢复计时
+  const resumeTimer = useCallback((taskId) => {
+    const timer = activeTimers[taskId];
+    if (!timer) return;
+    
+    const startTime = Date.now();
+    // 保持之前的累计时间，从新的 start 开始继续计时
+    const previousElapsed = timer.elapsed || 0;
+    
+    setActiveTimers(prev => ({
+      ...prev,
+      [taskId]: {
+        ...prev[taskId],
+        running: true,
+        start: startTime,
+        elapsed: previousElapsed // 保持之前的累计时间
+      }
+    }));
+    
+    // 添加新的计时记录
+    const { quadrant, index } = timer;
     setTasks(prev => {
+      const updated = { ...prev };
+      updated[quadrant] = prev[quadrant].map((t, i) =>
+        i === index ? { ...t, timeRecords: [...(t.timeRecords||[]), { start: startTime }] } : t
+      );
+      return updated;
+    });
+  }, [activeTimers]);
+
+  // 停止计时（支持多任务）
+  const stopTimer = useCallback(async (taskId) => {
+    const timer = activeTimers[taskId];
+    if (!timer) return;
+    
+    const { quadrant, index } = timer;
+    const task = tasks[quadrant]?.[index];
+    if (!task) return;
+    
+    const recs = [...(task.timeRecords||[])];
+    if (recs.length && !recs[recs.length-1].end) {
+      recs[recs.length-1].end = Date.now();
+      try {
+        await updateTask(task.id, { timeRecords: recs });
+      } catch (error) {
+        console.error('保存计时记录失败:', error);
+      }
+    }
+    
+    setTasks(prev => ({
+      ...prev,
+      [quadrant]: prev[quadrant].map((t, i) => 
+        i === index ? { ...t, timeRecords: recs } : t
+      )
+    }));
+    
+    // 从活跃计时器中移除
+    setActiveTimers(prev => {
+      const updated = { ...prev };
+      delete updated[taskId];
+      return updated;
+    });
+    
+    // 清除缩小状态
+    setCollapsedTaskId(null);
+  }, [activeTimers, tasks]);
+
+  const closeTimer = async () => {
+    clearInterval(timerRef.current);
+    // 如果计时器正在运行，保存当前记录
+    if (timerState.running) {
       const { quadrant, index } = focusTimer;
-      const updated = prev[quadrant].map((task, i) => {
-        if (i !== index) return task;
+      const task = tasks[quadrant]?.[index];
+      if (task) {
         const recs = [...(task.timeRecords||[])];
-        if (recs.length && !recs[recs.length-1].end) recs[recs.length-1].end = Date.now();
-        updateTask(task.id, { timeRecords: recs });
-        return { ...task, timeRecords: recs };
-      });
-      return { ...prev, [quadrant]: updated };
-    });
-    setFocusTimer({ open: false, quadrant: '', index: -1 });
-  };
-
-  const closeTimer = () => {
-    clearInterval(timerRef.current);
+        if (recs.length && !recs[recs.length-1].end) {
+          recs[recs.length-1].end = Date.now();
+          try {
+            await updateTask(task.id, { timeRecords: recs });
+            setTasks(prev => ({
+              ...prev,
+              [quadrant]: prev[quadrant].map((t, i) => 
+                i === index ? { ...t, timeRecords: recs } : t
+              )
+            }));
+          } catch (error) {
+            console.error('保存计时记录失败:', error);
+          }
+        }
+      }
+    }
     setFocusTimer({ open: false, quadrant: '', index: -1 });
     setTimerState({ running: false, start: null, elapsed: 0 });
   };
@@ -1179,6 +1694,15 @@ export default function StyledTaskBoard({ user }) {
   if (viewMode === 'stats') {
     return (
       <>
+        <TimerFloatingButton
+          activeTimers={activeTimers}
+          showTimerPanel={showTimerPanel}
+          setShowTimerPanel={setShowTimerPanel}
+          tasks={tasks}
+          pauseTimer={pauseTimer}
+          resumeTimer={resumeTimer}
+          stopTimer={stopTimer}
+        />
         <div style={{ 
           maxWidth: 1200, 
           margin: '0 auto', 
@@ -1276,7 +1800,7 @@ export default function StyledTaskBoard({ user }) {
             </div>
           </div>
           
-          <Stats user={user} onBack={() => setShowStats(false)} darkMode={false} />
+          <Stats user={user} tasks={Object.values(tasks).flat()} onBack={() => setShowStats(false)} darkMode={false} />
         </div>
         <Footer />
       </>
@@ -1286,7 +1810,17 @@ export default function StyledTaskBoard({ user }) {
   // 四象限视图
   if (viewMode === 'quadrant') {
     return (
-      <DndContext
+      <>
+        <TimerFloatingButton
+          activeTimers={activeTimers}
+          showTimerPanel={showTimerPanel}
+          setShowTimerPanel={setShowTimerPanel}
+          tasks={tasks}
+          pauseTimer={pauseTimer}
+          resumeTimer={resumeTimer}
+          stopTimer={stopTimer}
+        />
+        <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
@@ -1313,6 +1847,17 @@ export default function StyledTaskBoard({ user }) {
               <button onClick={() => setViewMode('calendar')} style={{ background: viewMode==='calendar' ? '#60a5fa' : '#e5e7eb', color: viewMode==='calendar' ? '#fff' : '#374151', border: 'none', borderRadius: 12, padding: '10px 20px', fontWeight: 600, fontSize: 15 }}>日历</button>
               <button onClick={() => setViewMode('integration')} style={{ background: viewMode==='integration' ? '#60a5fa' : '#e5e7eb', color: viewMode==='integration' ? '#fff' : '#374151', border: 'none', borderRadius: 12, padding: '10px 20px', fontWeight: 600, fontSize: 15 }}>集成</button>
               <button onClick={() => setViewMode('stats')} style={{ background: viewMode==='stats' ? '#60a5fa' : '#e5e7eb', color: viewMode==='stats' ? '#fff' : '#374151', border: 'none', borderRadius: 12, padding: '10px 20px', fontWeight: 600, fontSize: 15 }}>统计</button>
+              {viewMode === 'quadrant' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginLeft: 'auto' }}>
+                  <input
+                    type="checkbox"
+                    checked={showOnlyTimedTasks}
+                    onChange={(e) => setShowOnlyTimedTasks(e.target.checked)}
+                    style={{ cursor: 'pointer', width: 18, height: 18 }}
+                  />
+                  <span style={{ fontSize: 14, color: '#374151', fontWeight: 500 }}>仅显示有时长的任务</span>
+                </label>
+              )}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
@@ -1468,28 +2013,59 @@ export default function StyledTaskBoard({ user }) {
                   </div>
                 )}
                 {/* 未完成任务卡片 */}
-                {tasks[q].map((t, i) => !t.deleted && !t.completed && (
-                  <DraggableTask
-                    key={t.id}
-                    task={t}
-                    quadrant={q}
-                    index={i}
-                    onComplete={(checked) => handleComplete(q, i, checked)}
-                    onProgressChange={(value) => handleProgressChange(q, i, value)}
-                    onDelete={() => handleDelete(q, i)}
-                    onEdit={() => startEditTask(q, i)}
-                    onTimer={() => openTimer(q, i)}
-                    onDDL={() => openDDLModal(q, i)}
-                    isDragging={activeId === `${q}-${i}`}
-                    editingTask={editingTask}
-                    tempTaskText={tempTaskText}
-                    setTempTaskText={setTempTaskText}
-                    saveEditTask={saveEditTask}
-                    setEditingTask={setEditingTask}
-                  />
-                ))}
+                {tasks[q]
+                  .filter(t => !t.deleted && !t.completed)
+                  .filter(t => {
+                    // 如果启用过滤，只显示有时长的任务
+                    if (showOnlyTimedTasks) {
+                      return getTaskTotalTime(t) > 0;
+                    }
+                    return true;
+                  })
+                  .map((t, i) => {
+                    // 重新计算索引，因为过滤后索引会变化
+                    const originalIndex = tasks[q].findIndex(task => task.id === t.id);
+                    const isActive = activeTimers[t.id] !== undefined;
+                    const isCollapsed = collapsedTaskId === t.id;
+                    return (
+                      <DraggableTask
+                        key={t.id}
+                        task={t}
+                        quadrant={q}
+                        index={originalIndex}
+                        onComplete={(checked) => handleComplete(q, originalIndex, checked)}
+                        onProgressChange={(value) => handleProgressChange(q, originalIndex, value)}
+                        onDelete={() => handleDelete(q, originalIndex)}
+                        onEdit={() => startEditTask(q, originalIndex)}
+                        onTimer={() => {
+                          // 如果任务已经在计时，则打开面板；否则开始计时
+                          if (isActive) {
+                            setShowTimerPanel(true);
+                          } else {
+                            startTimer(q, originalIndex);
+                          }
+                        }}
+                        onDDL={() => openDDLModal(q, originalIndex)}
+                        isDragging={activeId === `${q}-${originalIndex}`}
+                        editingTask={editingTask}
+                        tempTaskText={tempTaskText}
+                        setTempTaskText={setTempTaskText}
+                        saveEditTask={saveEditTask}
+                        setEditingTask={setEditingTask}
+                        isActive={isActive}
+                        isCollapsed={isCollapsed}
+                      />
+                    );
+                  })}
                 {/* 空面板拖拽区域 */}
-                {tasks[q].filter(t => !t.deleted && !t.completed).length === 0 && (
+                {tasks[q]
+                  .filter(t => !t.deleted && !t.completed)
+                  .filter(t => {
+                    if (showOnlyTimedTasks) {
+                      return getTaskTotalTime(t) > 0;
+                    }
+                    return true;
+                  }).length === 0 && (
                   <DroppableEmptyPanel quadrant={q} />
                 )}
                 {/* 添加任务输入框 */}
@@ -1739,6 +2315,7 @@ export default function StyledTaskBoard({ user }) {
           ) : null}
         </DragOverlay>
       </DndContext>
+      </>
     );
   }
 
@@ -1749,6 +2326,16 @@ export default function StyledTaskBoard({ user }) {
     const pendingTasks = sortTasks(allTasks.filter(task => !task.completed));
 
     return (
+      <>
+        <TimerFloatingButton
+          activeTimers={activeTimers}
+          showTimerPanel={showTimerPanel}
+          setShowTimerPanel={setShowTimerPanel}
+          tasks={tasks}
+          pauseTimer={pauseTimer}
+          resumeTimer={resumeTimer}
+          stopTimer={stopTimer}
+        />
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -2069,7 +2656,12 @@ export default function StyledTaskBoard({ user }) {
                   onTimer={() => {
                     const q = task.quadrant;
                     const i = tasks[q].findIndex(t => t.id === task.id);
-                    openTimer(q, i);
+                    // 如果任务已经在计时，则打开面板；否则开始计时
+                    if (activeTimers[task.id]) {
+                      setShowTimerPanel(true);
+                    } else {
+                      startTimer(q, i);
+                    }
                   }}
                   onDDL={() => {
                     const q = task.quadrant;
@@ -2249,6 +2841,7 @@ export default function StyledTaskBoard({ user }) {
           ) : null}
         </DragOverlay>
       </DndContext>
+      </>
     );
   }
 
@@ -2256,6 +2849,15 @@ export default function StyledTaskBoard({ user }) {
   if (viewMode === 'calendar') {
     return (
       <>
+        <TimerFloatingButton
+          activeTimers={activeTimers}
+          showTimerPanel={showTimerPanel}
+          setShowTimerPanel={setShowTimerPanel}
+          tasks={tasks}
+          pauseTimer={pauseTimer}
+          resumeTimer={resumeTimer}
+          stopTimer={stopTimer}
+        />
         <div style={{ 
           maxWidth: 1200, 
           margin: '0 auto', 
@@ -2366,6 +2968,15 @@ export default function StyledTaskBoard({ user }) {
   if (viewMode === 'integration') {
     return (
       <>
+        <TimerFloatingButton
+          activeTimers={activeTimers}
+          showTimerPanel={showTimerPanel}
+          setShowTimerPanel={setShowTimerPanel}
+          tasks={tasks}
+          pauseTimer={pauseTimer}
+          resumeTimer={resumeTimer}
+          stopTimer={stopTimer}
+        />
         <div style={{ 
           maxWidth: 1200, 
           margin: '0 auto', 
