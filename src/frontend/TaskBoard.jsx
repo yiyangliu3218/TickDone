@@ -84,12 +84,24 @@ function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
   }
 
   const now = new Date();
-  const startDate = createdAt ? new Date(createdAt) : now;
-  const endDate = ddlDate ? new Date(ddlDate) : new Date(startDate.getTime() + (daysToDDL || 0) * 24 * 60 * 60 * 1000);
+  let endDate;
+  let totalDays;
   
-  const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+  if (ddlDate) {
+    // 使用具体日期
+    endDate = new Date(ddlDate + 'T23:59:59');
+    const startDate = createdAt ? new Date(createdAt) : now;
+    totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+  } else if (daysToDDL) {
+    // 使用剩余天数：从当前时间开始计算
+    endDate = new Date(now.getTime() + daysToDDL * 24 * 60 * 60 * 1000);
+    totalDays = daysToDDL;
+  } else {
+    return null;
+  }
+  
   const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
-  const progress = Math.max(0, Math.min(1, (totalDays - daysLeft) / totalDays));
+  const progress = totalDays > 0 ? Math.max(0, Math.min(1, (totalDays - daysLeft) / totalDays)) : 0;
   
   // 颜色判断：1天红色，3天黄色，7天蓝色，其他绿色
   let color = '#10b981'; // 默认绿色
@@ -97,6 +109,9 @@ function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
   else if (daysLeft <= 1) color = '#ef4444'; // 1天红色
   else if (daysLeft <= 3) color = '#f59e0b'; // 3天黄色
   else if (daysLeft <= 7) color = '#3b82f6'; // 7天蓝色
+  
+  // 显示文本：确保显示正确的剩余天数
+  const displayText = daysLeft;
   
   return (
     <div 
@@ -110,13 +125,13 @@ function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        fontSize: '10px',
+        fontSize: Math.abs(displayText) > 99 ? '8px' : '10px',
         color: color,
         fontWeight: 'bold',
         position: 'relative',
         zIndex: 2
       }}
-      title={`剩余${daysLeft}天`}
+      title={daysLeft < 0 ? `已过期${Math.abs(daysLeft)}天` : `剩余${daysLeft}天`}
     >
       <div style={{
         position: 'absolute',
@@ -128,7 +143,7 @@ function DDLCircle({ createdAt, ddlDate, daysToDDL, onClick }) {
         background: `conic-gradient(${color} ${progress * 360}deg, transparent ${progress * 360}deg)`,
         opacity: 0.2
       }} />
-      <span style={{ zIndex: 1 }}>{daysLeft}</span>
+      <span style={{ zIndex: 1 }}>{displayText}</span>
     </div>
   );
 }
@@ -1080,8 +1095,21 @@ export default function StyledTaskBoard({ user }) {
   const openDDLModal = (q, i) => {
     const task = tasks[q][i];
     setDDLModal({ open: true, quadrant: q, index: i });
-    setDDLDate(task.ddlDate || '');
-    setDDLDays(task.daysToDDL || '');
+    // 根据任务已有的DDL数据设置正确的模式
+    if (task.ddlDate) {
+      setDDLMode('date');
+      setDDLDate(task.ddlDate);
+      setDDLDays('');
+    } else if (task.daysToDDL) {
+      setDDLMode('days');
+      setDDLDays(task.daysToDDL.toString());
+      setDDLDate('');
+    } else {
+      // 默认使用日期模式
+      setDDLMode('date');
+      setDDLDate('');
+      setDDLDays('');
+    }
   };
 
   const closeDDLModal = () => {
@@ -1092,22 +1120,40 @@ export default function StyledTaskBoard({ user }) {
 
   const saveDDL = async () => {
     const { quadrant, index } = ddlModal;
+    if (!ddlModal.open || !tasks[quadrant] || !tasks[quadrant][index]) return;
+    
     const task = tasks[quadrant][index];
     
     try {
       const updates = {};
-      if (ddlMode === 'date' && ddlDate) {
-        updates.ddlDate = ddlDate;
-        updates.daysToDDL = null;
-      } else if (ddlMode === 'days' && ddlDays) {
-        updates.daysToDDL = parseInt(ddlDays);
-        updates.ddlDate = null;
+      if (ddlMode === 'date') {
+        if (ddlDate && ddlDate.trim()) {
+          updates.ddlDate = ddlDate;
+          updates.daysToDDL = null;
+        } else {
+          // 清空DDL
+          updates.ddlDate = null;
+          updates.daysToDDL = null;
+        }
+      } else if (ddlMode === 'days') {
+        const days = ddlDays ? parseInt(ddlDays) : null;
+        if (days && !isNaN(days) && days > 0) {
+          updates.daysToDDL = days;
+          updates.ddlDate = null;
+        } else {
+          // 清空DDL
+          updates.ddlDate = null;
+          updates.daysToDDL = null;
+        }
       }
       
       await updateTask(task.id, updates);
+      // 更新本地状态，确保立即反映变化
       setTasks(prev => ({
         ...prev,
-        [quadrant]: prev[quadrant].map((t, j) => j === index ? { ...t, ...updates } : t)
+        [quadrant]: prev[quadrant].map((t, j) => 
+          j === index ? { ...t, ...updates } : t
+        )
       }));
       closeDDLModal();
     } catch (error) {
